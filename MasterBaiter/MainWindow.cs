@@ -25,12 +25,16 @@ internal sealed class MainWindow : Window
     private readonly VendorIndex _vendors;
     private readonly Travel _travel;
     private readonly Route _route;
+    // Welche Zeile gerade ihr Ziel bearbeitet. 0 heisst: keine.
+    private uint _editing;
+    private bool _grabFocus;
+
     private string _message = string.Empty;
     private DateTime _messageUntil;
     private bool _wasRunning;
 
     public MainWindow(Configuration config, Restock restock, PurchaseQueue queue, ScripSweep sweep, MarketBoard market, CosmicTravel cosmic, VendorIndex vendors, Travel travel, Route route)
-        : base("MasterBaiter###MasterBaiterMain")
+        : base($"MasterBaiter {VersionText}###MasterBaiterMain")
     {
         _config = config;
         _restock = restock;
@@ -43,6 +47,21 @@ internal sealed class MainWindow : Window
         _route = route;
         Size = new Vector2(620, 480);
         SizeCondition = ImGuiCond.FirstUseEver;
+    }
+
+    /// <summary>
+    /// Die Fassung fuer die Titelleiste. Aus der Assembly gelesen, nicht
+    /// danebengeschrieben: Eine Zahl, die von Hand gepflegt wird, steht
+    /// frueher oder spaeter falsch da. Die vierte Stelle ist immer null und
+    /// faellt weg.
+    /// </summary>
+    private static string VersionText
+    {
+        get
+        {
+            var v = typeof(MainWindow).Assembly.GetName().Version;
+            return v == null ? string.Empty : $"{v.Major}.{v.Minor}.{v.Build}";
+        }
     }
 
     public override void OnOpen() => _restock.Refresh();
@@ -240,8 +259,7 @@ internal sealed class MainWindow : Window
     private void DrawOptionsTab()
     {
         Section("Stock levels");
-        ImGui.TextDisabled("How much of each is worth keeping. A bait costs a few gil, a lure a few");
-        ImGui.TextDisabled("thousand, so they are counted separately. The Target column overrides both.");
+        ImGui.TextDisabled("A lure costs a thousand times what a bait does, so they count separately.");
         ImGui.Spacing();
 
         ImGui.SetNextItemWidth(140);
@@ -277,6 +295,17 @@ internal sealed class MainWindow : Window
                              "100 is the default, 50 is twice as brisk, 200 twice as leisurely." +
                              Environment.NewLine +
                              "Going much below 50 makes the game miss steps: windows need a moment to fill.");
+
+        Section("Appearance");
+        var honey = _config.HoneyTheme;
+        if (ImGui.Checkbox("Honey theme", ref honey))
+        {
+            _config.HoneyTheme = honey;
+            _config.Save();
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Tints this window honey yellow." + Environment.NewLine +
+                             "Off: it follows your Dalamud style like every other window.");
 
         Section("Bait list");
         var showAll = _config.ShowAllTackle;
@@ -339,8 +368,7 @@ internal sealed class MainWindow : Window
             : $"Missing: {string.Join(" and ", helpers)}.");
 
         Section("Cosmic Exploration");
-        ImGui.TextDisabled("No aetheryte leads to the planets. The way is Drivingway, the Moon Rover in");
-        ImGui.TextDisabled("Mare Lamentorum, which the plugin knows. Talking to a different one remembers it.");
+        ImGui.TextDisabled("No aetheryte goes there. The way is Drivingway, the Moon Rover in Mare Lamentorum.");
         ImGui.Spacing();
 
         var planets = CosmicPlanet.FromSheet();
@@ -404,8 +432,7 @@ internal sealed class MainWindow : Window
         }
 
         Section("Market board");
-        ImGui.TextDisabled("For baits no vendor sells. Prices here are set by other players, not by the");
-        ImGui.TextDisabled("game, so both limits always apply and cannot be switched off.");
+        ImGui.TextDisabled("Prices here are set by players, not by the game, so both limits always apply.");
         ImGui.Spacing();
 
         var useMarket = _config.UseMarketBoard;
@@ -441,7 +468,7 @@ internal sealed class MainWindow : Window
         ImGui.TextDisabled("A stack larger than what you are missing is never bought, at any price.");
 
         Section("Diagnostics");
-        ImGui.TextDisabled("All three write to /xllog.");
+        ImGui.TextDisabled("All of these write to /xllog.");
         ImGui.Spacing();
 
         using (ImRaiiDisabled(!_vendors.Ready))
@@ -514,21 +541,30 @@ internal sealed class MainWindow : Window
 
     private void DrawTable()
     {
-        const ImGuiTableFlags flags = ImGuiTableFlags.RowBg | ImGuiTableFlags.Borders
-                                      | ImGuiTableFlags.ScrollY | ImGuiTableFlags.SizingStretchProp;
+        // Waagerechte Linien statt eines Gitters: Die senkrechten Striche
+        // zerschneiden eine Zeile, die ohnehin von links nach rechts gelesen
+        // wird.
+        const ImGuiTableFlags flags = ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerH
+                                      | ImGuiTableFlags.ScrollY | ImGuiTableFlags.SizingStretchProp
+                                      | ImGuiTableFlags.PadOuterX;
 
         if (!ImGui.BeginTable("##baits", 7, flags))
             return;
 
-        ImGui.TableSetupColumn("Bait", ImGuiTableColumnFlags.WidthStretch, 2.2f);
-        ImGui.TableSetupColumn("Fish", ImGuiTableColumnFlags.WidthFixed, 50);
-        ImGui.TableSetupColumn("Inventory", ImGuiTableColumnFlags.WidthFixed, 75);
-        ImGui.TableSetupColumn("Target", ImGuiTableColumnFlags.WidthFixed, 70);
-        ImGui.TableSetupColumn("Missing", ImGuiTableColumnFlags.WidthFixed, 60);
-        ImGui.TableSetupColumn("Price", ImGuiTableColumnFlags.WidthFixed, 130);
-        ImGui.TableSetupColumn("Vendor", ImGuiTableColumnFlags.WidthFixed, 90);
+        // Die Haendlerspalte waechst mit, statt fest zu bleiben: Bei
+        // "13 vendors" plus Knopf reichten neunzig Punkte nicht, und der Knopf
+        // wurde am rechten Rand abgeschnitten.
+        ImGui.TableSetupColumn("Bait", ImGuiTableColumnFlags.WidthStretch, 2.6f);
+        ImGui.TableSetupColumn("Fish", ImGuiTableColumnFlags.WidthFixed, 42);
+        ImGui.TableSetupColumn("Have", ImGuiTableColumnFlags.WidthFixed, 58);
+        ImGui.TableSetupColumn("Target", ImGuiTableColumnFlags.WidthFixed, 62);
+        ImGui.TableSetupColumn("Missing", ImGuiTableColumnFlags.WidthFixed, 58);
+        // Der Preis ist "5 gil" bis "1920 gil" — mitwachsend war er meist zu
+        // drei Vierteln leer. Fest, und der Platz geht an den Koedernamen.
+        ImGui.TableSetupColumn("Price", ImGuiTableColumnFlags.WidthFixed, 82);
+        ImGui.TableSetupColumn("Vendor", ImGuiTableColumnFlags.WidthStretch, 1.3f);
         ImGui.TableSetupScrollFreeze(0, 1);
-        ImGui.TableHeadersRow();
+        CenteredHeadersRow(7, 1, 5);
 
         foreach (var row in _restock.Rows)
         {
@@ -552,51 +588,82 @@ internal sealed class MainWindow : Window
             ImGui.TableNextColumn();
             if (row.Needed)
             {
-                ImGui.TextUnformatted(row.Fish.Count.ToString());
+                Centered(row.Fish.Count.ToString(), Dim);
                 if (ImGui.IsItemHovered() && row.Fish.Count > 0)
                     ImGui.SetTooltip(string.Join("\n", row.Fish.Take(20).Select(Restock.ItemName)));
             }
             else
             {
-                ImGui.TextDisabled("-");
+                Centered("-", Dim);
                 if (ImGui.IsItemHovered())
                     ImGui.SetTooltip("No fish on your list needs this one.");
             }
 
             ImGui.TableNextColumn();
-            ImGui.TextUnformatted(row.Have.ToString());
+            Centered(row.Have.ToString(), row.Missing > 0 ? null : Dim);
 
+            // Zwanzig Eingabekaesten untereinander waren das lauteste in der
+            // Tabelle, und ihre Zahl stand als einzige links, waehrend die
+            // Nachbarspalten rechts standen. Jetzt steht hier eine Zahl wie in
+            // jeder anderen Spalte, und das Feld erscheint erst beim Anklicken.
             ImGui.TableNextColumn();
             var target = row.Target;
-            ImGui.SetNextItemWidth(-1);
-            if (ImGui.InputInt("##target", ref target, 0, 0))
+            if (_editing == row.BaitId)
             {
-                target = Math.Clamp(target, 0, 9999);
-                if (target == _config.DefaultTarget) _config.Targets.Remove(row.BaitId);
-                else _config.Targets[row.BaitId] = target;
-                row.Target = target;
-                _config.Save();
+                if (_grabFocus)
+                {
+                    ImGui.SetKeyboardFocusHere();
+                    _grabFocus = false;
+                }
+
+                ImGui.SetNextItemWidth(-1);
+                if (ImGui.InputInt("##target", ref target, 0, 0, "%d", ImGuiInputTextFlags.AutoSelectAll))
+                {
+                    target = Math.Clamp(target, 0, 9999);
+                    if (target == _config.DefaultTarget) _config.Targets.Remove(row.BaitId);
+                    else _config.Targets[row.BaitId] = target;
+                    row.Target = target;
+                    _config.Save();
+                }
+
+                if (ImGui.IsItemDeactivated())
+                    _editing = 0;
+            }
+            else
+            {
+                ImGui.PushStyleVar(ImGuiStyleVar.SelectableTextAlign, new Vector2(0.5f, 0f));
+                if (ImGui.Selectable($"{target}##target", false))
+                {
+                    _editing = row.BaitId;
+                    _grabFocus = true;
+                }
+                ImGui.PopStyleVar();
+
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip("Click to edit");
             }
 
             ImGui.TableNextColumn();
-            ImGui.TextUnformatted(row.Missing > 0 ? row.Missing.ToString() : "-");
+            // Die Fehlmenge ist die Zahl, wegen der man das Fenster oeffnet.
+            Centered(row.Missing > 0 ? row.Missing.ToString() : "-",
+                row.Missing > 0 ? (row.Ignored ? Dim : Wanted) : Dim);
 
             // Preis: was der offene Haendler verlangt, sonst der Wert aus den Spieldaten
             ImGui.TableNextColumn();
             // Im Waehrungsladen ist der Preis in Scrips, nicht in Gil. Dann lieber
             // den Text aus den Spieldaten, der die Waehrung benennt.
             if (row.InShop && row.Price > 0)
-                ImGui.TextUnformatted(row.Currency != 0
+                Centered(row.Currency != 0
                     ? $"{row.Price} {Restock.ItemName(row.Currency)}"
                     : $"{row.Price} gil");
             else if (_vendors.PriceFor(row.BaitId) is { } price)
-                ImGui.TextDisabled(price);
+                Centered(price, Dim);
             else if (_market.QuoteFor(row.BaitId) is { } quote)
             {
                 // Vom Marktbrett, nicht aus den Spieldaten: von einem Spieler
                 // gesetzt und in einer Stunde womoeglich ein anderer. Deshalb
                 // gekennzeichnet und mit Alter im Hinweistext.
-                ImGui.TextDisabled(quote.UnitPrice > 0 ? $"{quote.UnitPrice} gil ~" : "none listed");
+                Centered(quote.UnitPrice > 0 ? $"{quote.UnitPrice} gil ~" : "none listed", Dim);
                 if (ImGui.IsItemHovered())
                 {
                     var age = DateTime.Now - quote.When;
@@ -611,7 +678,7 @@ internal sealed class MainWindow : Window
                 }
             }
             else
-                ImGui.TextDisabled("—");
+                Centered("—", Dim);
 
             ImGui.TableNextColumn();
             if (row.InShop)
@@ -631,14 +698,14 @@ internal sealed class MainWindow : Window
                 var vendors = _vendors.For(row.BaitId);
                 if (vendors.Count > 0)
                 {
-                    ImGui.TextDisabled(vendors.Count == 1 ? "1 vendor" : $"{vendors.Count} vendors");
+                    ImGui.TextColored(Dim, vendors.Count == 1 ? "1 vendor" : $"{vendors.Count} vendors");
                     if (ImGui.IsItemHovered())
                         ImGui.SetTooltip(string.Join(Environment.NewLine, vendors.Take(15).Select(v => $"{v} [{v.KindName}]")));
 
                     var best = vendors.FirstOrDefault(Reach.CanReach);
                     if (Reach.CanReach(best))
                     {
-                        ImGui.SameLine();
+                        SameLineFarRight("Go");
                         using (ImRaiiDisabled(_travel.Running || _queue.Running || _sweep.Running || _market.Running || !_travel.Available))
                         {
                             if (ImGui.SmallButton("Go"))
@@ -678,7 +745,7 @@ internal sealed class MainWindow : Window
                             ImGui.SetTooltip(string.Join(Environment.NewLine, lines));
                         }
 
-                        ImGui.SameLine();
+                        SameLineFarRight("Go");
                         using (ImRaiiDisabled(_travel.Running || _queue.Running || _sweep.Running
                                               || _market.Running || !_travel.Available))
                         {
@@ -743,6 +810,150 @@ internal sealed class MainWindow : Window
     {
         _message = text;
         _messageUntil = DateTime.Now.AddSeconds(4);
+    }
+
+    /// <summary>Gedaempft — fuer alles, was gerade nichts von einem will.</summary>
+    private static readonly Vector4 Dim = new(0.55f, 0.55f, 0.55f, 1f);
+
+    /// <summary>
+    /// Honiggelb. Die eine Akzentfarbe des Fensters — fuer die Fehlmenge, den
+    /// aktiven Reiter, Haken und Regler. Mehr als eine Akzentfarbe waere keine.
+    /// </summary>
+    private static readonly Vector4 Honey = new(1f, 0.83f, 0.36f, 1f);
+
+    /// <summary>
+    /// Ein gesaettigtes Gelb, das man abdunkelt, ist Braun — daran ist nichts
+    /// zu machen. Gelb bleibt nur gelb, solange es hell ist. Deshalb tragen die
+    /// hellen Toene die Farbe, und die ruhenden Flaechen sind fast neutral:
+    /// Braune Knoepfe und braune Reiter waren der ganze Fehler.
+    /// </summary>
+    private static readonly Vector4 HoneyLit = new(0.93f, 0.75f, 0.30f, 1f);
+    private static readonly Vector4 HoneyMid = new(0.74f, 0.58f, 0.20f, 1f);
+
+    private static readonly Vector4 HoneyDark = new(0.20f, 0.18f, 0.14f, 0.90f);
+    private static readonly Vector4 HoneyFaint = new(0.15f, 0.14f, 0.11f, 0.75f);
+
+    /// <summary>Warm — fuer die Fehlmenge, die einzige Zahl, die zum Handeln auffordert.</summary>
+    private static readonly Vector4 Wanted = Honey;
+
+    /// <summary>
+    /// Setzt den Knopf ans rechte Ende der Zelle statt direkt hinter den Text.
+    ///
+    /// Die Beschriftungen sind verschieden lang — "market" gegen "17 vendors" —,
+    /// also stand jeder Knopf woanders und das Auge musste ihn in jeder Zeile
+    /// neu suchen. Am rechten Rand stehen sie in einer Flucht und die Spalte
+    /// wird zu einem Ziel statt zu zwanzig.
+    /// </summary>
+    private static void SameLineFarRight(string label)
+    {
+        var width = ImGui.CalcTextSize(label).X + (ImGui.GetStyle().FramePadding.X * 2f);
+
+        ImGui.SameLine();
+        var space = ImGui.GetContentRegionAvail().X;
+        if (space > width)
+            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + space - width);
+    }
+
+    /// <summary>
+    /// Faerbt das Fenster honiggelb. Nur dieses Fenster und nur zwischen Pre-
+    /// und PostDraw; die Farben des Spielers bleiben ueberall sonst, wie sie sind.
+    /// </summary>
+    private int _pushed;
+
+    public override void PreDraw()
+    {
+        _pushed = 0;
+        if (!_config.HoneyTheme)
+            return;
+
+        void Push(ImGuiCol which, Vector4 colour)
+        {
+            ImGui.PushStyleColor(which, colour);
+            _pushed++;
+        }
+
+        // Ruhend: neutral dunkel. Beruehrt oder ausgewaehlt: wirklich gelb.
+        Push(ImGuiCol.TitleBgActive, HoneyMid);
+        Push(ImGuiCol.Tab, HoneyFaint);
+        Push(ImGuiCol.TabHovered, HoneyLit);
+        Push(ImGuiCol.TabActive, HoneyMid);
+        Push(ImGuiCol.TabUnfocusedActive, HoneyDark);
+        Push(ImGuiCol.Button, HoneyDark);
+        Push(ImGuiCol.ButtonHovered, HoneyMid);
+        Push(ImGuiCol.ButtonActive, HoneyLit);
+        Push(ImGuiCol.Header, HoneyDark);
+        Push(ImGuiCol.HeaderHovered, HoneyMid);
+        Push(ImGuiCol.HeaderActive, HoneyLit);
+        Push(ImGuiCol.FrameBg, HoneyFaint);
+        Push(ImGuiCol.FrameBgHovered, HoneyDark);
+        Push(ImGuiCol.FrameBgActive, HoneyMid);
+        Push(ImGuiCol.CheckMark, Honey);
+        Push(ImGuiCol.SliderGrab, HoneyMid);
+        Push(ImGuiCol.SliderGrabActive, Honey);
+        Push(ImGuiCol.TableHeaderBg, HoneyDark);
+        Push(ImGuiCol.Separator, HoneyMid);
+        Push(ImGuiCol.Border, HoneyMid);
+        Push(ImGuiCol.ResizeGrip, HoneyDark);
+        Push(ImGuiCol.ResizeGripHovered, HoneyMid);
+        Push(ImGuiCol.ResizeGripActive, Honey);
+    }
+
+    public override void PostDraw()
+    {
+        if (_pushed > 0)
+            ImGui.PopStyleColor(_pushed);
+
+        _pushed = 0;
+    }
+
+    /// <summary>
+    /// Die Kopfzeile von Hand, damit die Ueberschriften der Zahlenspalten
+    /// mittig ueber ihren Zahlen stehen.
+    ///
+    /// <see cref="ImGui.TableHeadersRow"/> setzt jede Ueberschrift links an den
+    /// Spaltenrand und kennt keine Ausrichtung. Bei mittigen Zahlen stand damit
+    /// jede Ueberschrift neben statt ueber ihrer Spalte.
+    /// </summary>
+    private static void CenteredHeadersRow(int columns, int firstCentered, int lastCentered)
+    {
+        ImGui.TableNextRow(ImGuiTableRowFlags.Headers);
+
+        for (var i = 0; i < columns; i++)
+        {
+            if (!ImGui.TableSetColumnIndex(i))
+                continue;
+
+            var name = ImGui.TableGetColumnName(i).ToString();
+            if (i >= firstCentered && i <= lastCentered)
+            {
+                var width = ImGui.CalcTextSize(name).X;
+                var space = ImGui.GetContentRegionAvail().X;
+                if (space > width)
+                    ImGui.SetCursorPosX(ImGui.GetCursorPosX() + ((space - width) * 0.5f));
+            }
+
+            ImGui.PushID(i);
+            ImGui.TableHeader(name);
+            ImGui.PopID();
+        }
+    }
+
+    /// <summary>
+    /// Zahl mittig in der Spalte. Die Zahlenspalten sind schmal genug, dass die
+    /// Ziffern damit unter ihrer Ueberschrift stehen — und alle vier stehen
+    /// gleich, was vorher nicht der Fall war.
+    /// </summary>
+    private static void Centered(string text, Vector4? colour = null)
+    {
+        var width = ImGui.CalcTextSize(text).X;
+        var space = ImGui.GetContentRegionAvail().X;
+        if (space > width)
+            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + ((space - width) * 0.5f));
+
+        if (colour is { } c)
+            ImGui.TextColored(c, text);
+        else
+            ImGui.TextUnformatted(text);
     }
 
     private static IDisposable ImRaiiDisabled(bool disabled) => new DisabledScope(disabled);

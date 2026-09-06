@@ -10,6 +10,36 @@ the market board.
 
 ---
 
+## What is new in 0.3.6
+
+A pass over the window. Nothing about what the plugin does changed.
+
+**The Go buttons stand in one column.** They used to sit directly behind the
+vendor text, and that text is sometimes `market` and sometimes `17 vendors`, so
+every button was somewhere else and the eye had to find it again in each row. In
+the widest case the button was pushed past the edge of a fixed 90-point column
+and could not be clicked at all.
+
+**Numbers are centred, with their headings above them.** `Have` and `Missing`
+were right-aligned, the target was left-aligned inside a box, and every heading
+sat at the left edge regardless. The vertical grid lines are gone as well: a row
+is read across, and the lines cut it into pieces.
+
+**The target is a number now.** Twenty framed input boxes stacked down the
+column were the loudest thing in the table. Click the number and the field
+appears, focused and selected, so you can just type.
+
+**Honey yellow.** One accent colour, on the missing amount, the active tab,
+check marks and sliders. Resting surfaces stay near-neutral, because a saturated
+yellow that is darkened is brown, and brown buttons were not the intent. Options
+has a switch to turn it off, since it overrides your Dalamud style for this one
+window.
+
+**The title bar names the version**, read from the assembly rather than kept by
+hand in a second place.
+
+---
+
 ## What is new in 0.3.5
 
 **Shorter walks, everywhere.** Only 28 of 452 aetherytes had a position the

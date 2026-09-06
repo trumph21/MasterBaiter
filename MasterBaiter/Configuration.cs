@@ -28,6 +28,12 @@ internal sealed class Configuration : IPluginConfiguration
     /// <summary>Koeder, die trotz Bedarf nicht nachgekauft werden sollen.</summary>
     public HashSet<uint> Ignored { get; set; } = [];
 
+    /// <summary>
+    /// Die honiggelbe Einfaerbung des Fensters. Sie ueberschreibt fuer dieses
+    /// eine Fenster die Dalamud-Farben, deshalb laesst sie sich abschalten.
+    /// </summary>
+    public bool HoneyTheme { get; set; } = true;
+
     /// <summary>Nach der Reise von allein kaufen, sobald der Laden offen ist.</summary>
     public bool BuyOnArrival { get; set; } = true;
 
