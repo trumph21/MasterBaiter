@@ -315,6 +315,23 @@ MIT — see [LICENSE](LICENSE).
 
 ## Changelog
 
+### 0.3.8
+
+**A Debug tab.** `Self-check`, `Dump shop`, `Dump windows` and
+`Export log to desktop` write to the log and change nothing. They were sitting
+in Options, so anyone adjusting a stock amount had to scroll past them.
+
+**Options are in a sensible order.** How much to keep, what it may cost at the
+market board, what appears in the table, how it travels, and appearance last.
+`Speed %` was filed between two stock amounts although it is neither; it is a
+travel setting and now sits with them. `Report in chat` was under Travel
+although it is output, and joins the appearance switch under Interface.
+
+**Section headings follow the accent colour** instead of remaining the one blue
+thing in a honey-coloured window.
+
+---
+
 ### 0.3.7
 
 **`/mbait` appears in `/xlhelp`.** The short form has always worked, but it was

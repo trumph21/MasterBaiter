@@ -94,6 +94,12 @@ internal sealed class MainWindow : Window
             ImGui.EndTabItem();
         }
 
+        if (ImGui.BeginTabItem("Debug"))
+        {
+            DrawDebugTab();
+            ImGui.EndTabItem();
+        }
+
         ImGui.EndTabBar();
     }
 
@@ -282,30 +288,41 @@ internal sealed class MainWindow : Window
         if (ImGui.IsItemHovered())
             ImGui.SetTooltip($"{Tackle.LureCount} fishing tackle items count as lures.");
 
-        ImGui.SetNextItemWidth(140);
-        var pacing = _config.PacingPercent;
-        if (ImGui.InputInt("Speed %", ref pacing, 10))
-        {
-            _config.PacingPercent = Math.Clamp(pacing, 10, 400);
-            _config.Save();
-            Pacing.Percent = _config.PacingPercent;
-        }
-        if (ImGui.IsItemHovered())
-            ImGui.SetTooltip("How long the plugin waits between actions, as a percentage." + Environment.NewLine +
-                             "100 is the default, 50 is twice as brisk, 200 twice as leisurely." +
-                             Environment.NewLine +
-                             "Going much below 50 makes the game miss steps: windows need a moment to fill.");
+        Section("Market board");
+        ImGui.TextDisabled("Prices here are set by players, not by the game, so both limits always apply.");
+        ImGui.Spacing();
 
-        Section("Appearance");
-        var honey = _config.HoneyTheme;
-        if (ImGui.Checkbox("Honey theme", ref honey))
+        var useMarket = _config.UseMarketBoard;
+        if (ImGui.Checkbox("Buy from the market board", ref useMarket))
         {
-            _config.HoneyTheme = honey;
+            _config.UseMarketBoard = useMarket;
             _config.Save();
         }
-        if (ImGui.IsItemHovered())
-            ImGui.SetTooltip("Tints this window honey yellow." + Environment.NewLine +
-                             "Off: it follows your Dalamud style like every other window.");
+
+        using (ImRaiiDisabled(!_config.UseMarketBoard))
+        {
+            ImGui.SetNextItemWidth(140);
+            var maxUnit = _config.MarketMaxUnitPrice;
+            if (ImGui.InputInt("Max gil per item", ref maxUnit))
+            {
+                _config.MarketMaxUnitPrice = Math.Clamp(maxUnit, 1, 99999999);
+                _config.Save();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Listings above this price per item are left alone.");
+
+            ImGui.SetNextItemWidth(140);
+            var maxRun = _config.MarketMaxGilPerRun;
+            if (ImGui.InputInt("Max gil per run", ref maxRun))
+            {
+                _config.MarketMaxGilPerRun = Math.Clamp(maxRun, 1, 999999999);
+                _config.Save();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("The run stops once it has spent this much.");
+        }
+
+        ImGui.TextDisabled("A stack larger than what you are missing is never bought, at any price.");
 
         Section("Bait list");
         var showAll = _config.ShowAllTackle;
@@ -331,6 +348,20 @@ internal sealed class MainWindow : Window
             ImGui.SetTooltip("Off: every list is counted, including the ones you switched off there.");
 
         Section("Travel");
+        ImGui.SetNextItemWidth(140);
+        var pacing = _config.PacingPercent;
+        if (ImGui.InputInt("Speed %", ref pacing, 10))
+        {
+            _config.PacingPercent = Math.Clamp(pacing, 10, 400);
+            _config.Save();
+            Pacing.Percent = _config.PacingPercent;
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("How long the plugin waits between actions, as a percentage." + Environment.NewLine +
+                             "100 is the default, 50 is twice as brisk, 200 twice as leisurely." +
+                             Environment.NewLine +
+                             "Going much below 50 makes the game miss steps: windows need a moment to fill.");
+
         var buyOnArrival = _config.BuyOnArrival;
         if (ImGui.Checkbox("Buy on arrival", ref buyOnArrival))
         {
@@ -339,17 +370,6 @@ internal sealed class MainWindow : Window
         }
         if (ImGui.IsItemHovered())
             ImGui.SetTooltip("After travelling, start buying as soon as the shop opens.");
-
-        var chat = _config.ChatFeedback;
-        if (ImGui.Checkbox("Report in chat", ref chat))
-        {
-            _config.ChatFeedback = chat;
-            _config.Save();
-        }
-        if (ImGui.IsItemHovered())
-            ImGui.SetTooltip("One line in the game chat when a run or a route finishes." +
-                             Environment.NewLine +
-                             "Only you see it. Everything else stays in /xllog.");
 
         var useSprint = _config.UseSprint;
         if (ImGui.Checkbox("Use Sprint", ref useSprint))
@@ -431,44 +451,37 @@ internal sealed class MainWindow : Window
             ImGui.TextUnformatted(_cosmic.Status);
         }
 
-        Section("Market board");
-        ImGui.TextDisabled("Prices here are set by players, not by the game, so both limits always apply.");
-        ImGui.Spacing();
-
-        var useMarket = _config.UseMarketBoard;
-        if (ImGui.Checkbox("Buy from the market board", ref useMarket))
+        Section("Interface");
+        var chat = _config.ChatFeedback;
+        if (ImGui.Checkbox("Report in chat", ref chat))
         {
-            _config.UseMarketBoard = useMarket;
+            _config.ChatFeedback = chat;
             _config.Save();
         }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("One line in the game chat when a run or a route finishes." +
+                             Environment.NewLine +
+                             "Only you see it. Everything else stays in /xllog.");
 
-        using (ImRaiiDisabled(!_config.UseMarketBoard))
+        var honey = _config.HoneyTheme;
+        if (ImGui.Checkbox("Honey theme", ref honey))
         {
-            ImGui.SetNextItemWidth(140);
-            var maxUnit = _config.MarketMaxUnitPrice;
-            if (ImGui.InputInt("Max gil per item", ref maxUnit))
-            {
-                _config.MarketMaxUnitPrice = Math.Clamp(maxUnit, 1, 99999999);
-                _config.Save();
-            }
-            if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("Listings above this price per item are left alone.");
-
-            ImGui.SetNextItemWidth(140);
-            var maxRun = _config.MarketMaxGilPerRun;
-            if (ImGui.InputInt("Max gil per run", ref maxRun))
-            {
-                _config.MarketMaxGilPerRun = Math.Clamp(maxRun, 1, 999999999);
-                _config.Save();
-            }
-            if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("The run stops once it has spent this much.");
+            _config.HoneyTheme = honey;
+            _config.Save();
         }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Tints this window honey yellow." + Environment.NewLine +
+                             "Off: it follows your Dalamud style like every other window.");
+    }
 
-        ImGui.TextDisabled("A stack larger than what you are missing is never bought, at any price.");
-
-        Section("Diagnostics");
-        ImGui.TextDisabled("All of these write to /xllog.");
+    /// <summary>
+    /// Werkzeuge, um herauszufinden, warum etwas nicht geht. Ein eigener Reiter,
+    /// weil sie keine Einstellungen sind: Wer die Zielmenge aendern will, soll
+    /// nicht an vier Knoepfen vorbei, die ins Protokoll schreiben.
+    /// </summary>
+    private void DrawDebugTab()
+    {
+        ImGui.TextDisabled("All of these write to /xllog. Nothing here changes what the plugin does.");
         ImGui.Spacing();
 
         using (ImRaiiDisabled(!_vendors.Ready))
@@ -531,11 +544,11 @@ internal sealed class MainWindow : Window
     }
 
     /// <summary>Ueberschrift eines Abschnitts im Einstellungsreiter.</summary>
-    private static void Section(string title)
+    private void Section(string title)
     {
         ImGui.Spacing();
         ImGui.Separator();
-        ImGui.TextColored(new Vector4(0.6f, 0.8f, 1f, 1f), title);
+        ImGui.TextColored(_config.HoneyTheme ? Honey : new Vector4(0.6f, 0.8f, 1f, 1f), title);
         ImGui.Spacing();
     }
 
