@@ -97,12 +97,34 @@ internal sealed class VendorIndex
     private readonly Dictionary<uint, List<Vendor>> _byBait = new();
     private readonly Dictionary<uint, List<string>> _otherSources = new();
     private readonly Dictionary<uint, string> _recipes = new();
-    private readonly Dictionary<uint, string> _prices = new();
+    /// <summary>
+    /// Je Koeder alle bekannten Preise, nicht nur einen.
+    ///
+    /// Dragonfly kostet Cosmocredits bei der Cosmic Exploration und Scrips am
+    /// Scrip-Tausch. Solange hier nur ein Preis stand, gewann der zuerst
+    /// gefundene und der andere war verloren — an einem Halt, der ihn genommen
+    /// haette, stand dann ein Fragezeichen. Die Reihenfolge ist die des
+    /// Findens: Gil zuerst, danach die Sonderlaeden.
+    /// </summary>
+    private readonly Dictionary<uint, List<string>> _prices = new();
+
+    private void AddPrice(uint itemId, string text)
+    {
+        lock (_lock)
+        {
+            if (!_prices.TryGetValue(itemId, out var list))
+                _prices[itemId] = list = [];
+
+            if (!list.Contains(text))
+                list.Add(text);
+        }
+    }
 
     // Namen der Oberkategorien des Scrip-Tauschs, in denen ueberhaupt ein
     // Koeder liegt. Alles andere braucht der Durchlauf nicht anzufassen.
     private readonly HashSet<string> _scripCategories = new(StringComparer.OrdinalIgnoreCase);
     private readonly VendorFallback _fallback = new();
+    private readonly PriceFallback _fallbackPrices = new();
     private readonly object _lock = new();
 
     private List<AetheryteSpot> _aetherytes = [];
@@ -177,11 +199,36 @@ internal sealed class VendorIndex
             return _otherSources.TryGetValue(baitId, out var v) ? v : [];
     }
 
-    /// <summary>Was der Koeder kostet, in Gil oder der jeweiligen Waehrung.</summary>
+    /// <summary>
+    /// Was der Koeder kostet, in Gil oder der jeweiligen Waehrung.
+    ///
+    /// Die Spieldaten gehen vor. Erst wenn sie nichts hergeben — bei
+    /// Scrip-Koedern der Regelfall — kommt der mitgelieferte Wert aus der
+    /// Eorzea-Datenbank zum Zug.
+    /// </summary>
     public string? PriceFor(uint baitId)
     {
         lock (_lock)
-            return _prices.GetValueOrDefault(baitId);
+            if (_prices.TryGetValue(baitId, out var known) && known.Count > 0)
+                return known[0];
+
+        return _fallbackPrices.For(baitId);
+    }
+
+    /// <summary>
+    /// Alle bekannten Preise, damit sich der passende zum Laden aussuchen
+    /// laesst. Der mitgelieferte Wert steht hinten: Spieldaten gehen vor.
+    /// </summary>
+    public List<string> PricesFor(uint baitId)
+    {
+        List<string> all;
+        lock (_lock)
+            all = _prices.TryGetValue(baitId, out var known) ? [.. known] : [];
+
+        if (_fallbackPrices.For(baitId) is { } extra && !all.Contains(extra))
+            all.Add(extra);
+
+        return all;
     }
 
     /// <summary>
@@ -280,8 +327,7 @@ internal sealed class VendorIndex
                 // Der Ladenpreis eines Gil-Haendlers steht am Item selbst.
                 var price = row.Item.ValueNullable?.PriceMid ?? 0;
                 if (price > 0)
-                    lock (_lock)
-                        _prices.TryAdd(row.Item.RowId, $"{price} gil");
+                    AddPrice(row.Item.RowId, $"{price} gil");
             }
 
         // SpecialShop-Zeile -> welche Koeder darin liegen. Der Scrip-Tausch
@@ -320,17 +366,28 @@ internal sealed class VendorIndex
                         continue;
 
                     var costItem = cost.ItemCost.ValueNullable;
+
                     // Nur echte Waehrungen. Sonderlaeden tauschen auch Kristalle
                     // oder Materialien, und das ist kein Preis, den man wissen will.
-                    if (costItem == null || costItem.Value.ItemUICategory.RowId != CurrencyCategory)
+                    //
+                    // Cosmocredit und Lunar Credit stehen aber nicht in der
+                    // Kategorie "Currency", sondern in "Other" — deshalb fiel
+                    // jeder Preis der Cosmic Exploration durch diese Pruefung
+                    // und die Vorschau zeigte dort ein Fragezeichen.
+                    if (costItem == null)
+                        continue;
+                    if (costItem.Value.ItemUICategory.RowId != CurrencyCategory
+                        && !IsCosmicCurrency(cost.ItemCost.RowId))
                         continue;
 
                     var currency = costItem.Value.Name.ExtractText();
                     if (string.IsNullOrWhiteSpace(currency))
                         continue;
                     var per = receive.ReceiveCount > 1 ? $" / {receive.ReceiveCount}" : string.Empty;
-                    lock (_lock)
-                        _prices.TryAdd(itemId, $"{cost.CurrencyCost} {currency}{per}");
+                    AddPrice(itemId, $"{cost.CurrencyCost} {currency}{per}");
+
+                    // Mehrere Kosten in einem Eintrag zahlt man zusammen, nicht
+                    // wahlweise. Der erste genuegt als Angabe.
                     break;
                 }
             }
@@ -567,6 +624,8 @@ internal sealed class VendorIndex
             $"{otherOnly} only without coordinates, {_recipes.Count} craftable, " +
             $"{unlocated} NPCs without a location entry, " +
             $"{_fallback.BaitCount} baits from the shipped table, " +
+            $"{_prices.Count} priced baits from the game data, " +
+            $"{_fallbackPrices.Count} fallback prices, " +
             $"{_aetherytes.Count} aetherytes known, " +
             $"{result.Values.SelectMany(v => v).Count(v => v.PreferredScripHub)} entries at the " +
             $"preferred scrip hub, {_scripCategories.Count} scrip categories with bait, " +

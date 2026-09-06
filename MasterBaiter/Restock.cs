@@ -35,6 +35,58 @@ internal sealed class Restock(Configuration config, BaitTable baits, GatherList 
         return inv == null ? 0 : inv->GetInventoryItemCount(itemId);
     }
 
+    /// <summary>Die vier Beutel, die das Spiel als Inventar fuehrt.</summary>
+    private static readonly InventoryType[] Bags =
+    [
+        InventoryType.Inventory1, InventoryType.Inventory2,
+        InventoryType.Inventory3, InventoryType.Inventory4,
+    ];
+
+    /// <summary>
+    /// Wie viele Stueck davon noch ins Inventar passen.
+    ///
+    /// Nicht nur freie Felder: Ein angebrochener Stapel nimmt bis zur
+    /// Stapelgroesse weiter auf, und Koeder stapeln sich bis 999. Arsenal und
+    /// Sattelfach zaehlen nicht mit — dorthin legt ein Kauf nichts.
+    ///
+    /// Ein nicht geladener Beutel wird uebersprungen statt als voll gewertet:
+    /// Lieber einen Kauf versuchen, der scheitern kann, als einen zu
+    /// verweigern, der gegangen waere.
+    /// </summary>
+    public static unsafe int FreeSpaceFor(uint itemId)
+    {
+        var inv = InventoryManager.Instance();
+        if (inv == null)
+            return 0;
+
+        var stack = (int)(Plugin.DataManager.GetExcelSheet<Item>()?
+            .GetRowOrDefault(itemId)?.StackSize ?? 999);
+        if (stack <= 0)
+            stack = 1;
+
+        var space = 0;
+        foreach (var type in Bags)
+        {
+            var bag = inv->GetInventoryContainer(type);
+            if (bag == null || !bag->IsLoaded)
+                continue;
+
+            for (var i = 0; i < bag->Size; i++)
+            {
+                var slot = bag->GetInventorySlot(i);
+                if (slot == null)
+                    continue;
+
+                if (slot->ItemId == 0)
+                    space += stack;
+                else if (slot->ItemId == itemId)
+                    space += Math.Max(0, stack - (int)slot->Quantity);
+            }
+        }
+
+        return space;
+    }
+
     public static string ItemName(uint itemId)
     {
         var sheet = Plugin.DataManager.GetExcelSheet<Item>();

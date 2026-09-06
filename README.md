@@ -315,6 +315,42 @@ MIT — see [LICENSE](LICENSE).
 
 ## Changelog
 
+### 0.3.9
+
+**A route preview.** `Preview` next to `Run route` lists every stop with the
+vendor, the zone, each bait with the amount missing, what it costs and the total
+per currency. What a run costs is worth knowing before it starts, not after.
+
+**A search box and sortable columns.** With `Show all fishing tackle` the table
+is 188 rows; finding something in it without searching was paging. Bait, Fish,
+Have, Target and Missing sort on click. Price and Vendor do not: the price comes
+from the open shop, the game data or the market board and is sometimes gil,
+sometimes scrips — an order over that would be invented.
+
+**Buying checks for room.** The currency was checked since 0.3.5, the bag was
+not. A purchase into a full inventory fails exactly as quietly as one without
+money: accepted, nothing booked, five seconds gone, three times over. Part-open
+stacks count — a slot holding 700 Mayfly still takes 299.
+
+**Cosmic Exploration prices were never shown.** Their currency sits in item
+category "Other", not "Currency", and the filter that keeps crystals and
+materials out of the price column was throwing them away with them.
+
+**One price per currency.** A bait can be sold for different currencies at
+different vendors — Dragonfly costs Cosmocredits at Cosmic Exploration and
+scrips at the exchange. Only the first one found used to be kept, so at the
+other vendor the price was blank. All are kept now, and each stop shows the one
+that vendor actually takes. Where none fits, the preview says so instead of
+naming a sum you will not pay.
+
+**Scrip prices ship as a table.** The game data has no price for a bait sold
+only for scrips — Baitbugs is in no gil shop at all. `tools/fetch-bait-prices.js`
+reads them from the Eorzea Database into `data/bait-prices.json`, used only
+where the game data is silent. A shipped file ages when Square Enix changes a
+price; the game data does not, so it goes first.
+
+---
+
 ### 0.3.8
 
 **A Debug tab.** `Self-check`, `Dump shop`, `Dump windows` and

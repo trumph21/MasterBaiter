@@ -29,6 +29,14 @@ internal sealed class MainWindow : Window
     private uint _editing;
     private bool _grabFocus;
 
+    // Suchtext ueber der Tabelle. Mit "Show all fishing tackle" sind es 188
+    // Zeilen; darin etwas zu finden, ohne zu suchen, ist Blaettern.
+    private string _filter = string.Empty;
+
+    // Die Vorschau wird im selben Frame geoeffnet, in dem der Knopf gedrueckt
+    // wurde; ImGui verlangt OpenPopup und BeginPopup im gleichen ID-Bereich.
+    private bool _openPreview;
+
     private string _message = string.Empty;
     private DateTime _messageUntil;
     private bool _wasRunning;
@@ -123,7 +131,9 @@ internal sealed class MainWindow : Window
             return;
         }
 
+        DrawFilter();
         DrawTable();
+        DrawRoutePreview();
     }
 
     /// <summary>
@@ -196,6 +206,15 @@ internal sealed class MainWindow : Window
 
                 ImGui.SetTooltip(string.Join(Environment.NewLine, lines));
             }
+
+            ImGui.SameLine();
+            using (ImRaiiDisabled(plan.Count == 0))
+            {
+                if (ImGui.Button("Preview"))
+                    _openPreview = true;
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Every stop with what it buys and what it costs, before anything moves.");
         }
 
         if (_travel.Running && !_route.Running)
@@ -464,7 +483,7 @@ internal sealed class MainWindow : Window
                              "Only you see it. Everything else stays in /xllog.");
 
         var honey = _config.HoneyTheme;
-        if (ImGui.Checkbox("Honey theme", ref honey))
+        if (ImGui.Checkbox("Y E L L O W theme", ref honey))
         {
             _config.HoneyTheme = honey;
             _config.Save();
@@ -552,6 +571,222 @@ internal sealed class MainWindow : Window
         ImGui.Spacing();
     }
 
+    /// <summary>
+    /// Was die Route vorhat, bevor sie losfaehrt: jeder Halt, was dort gekauft
+    /// wird und was es kostet.
+    ///
+    /// Der Hinweistext am Knopf konnte das nicht: Er verschwindet beim
+    /// Wegsehen, fasst nach sechs Koedern zusammen und nennt keine Preise. Was
+    /// ein Durchlauf kostet, sollte man vorher wissen und nicht hinterher.
+    /// </summary>
+    private void DrawRoutePreview()
+    {
+        if (_openPreview)
+        {
+            ImGui.OpenPopup("Route preview");
+            _openPreview = false;
+        }
+
+        var open = true;
+        ImGui.SetNextWindowSize(new Vector2(560, 480), ImGuiCond.Appearing);
+        if (!ImGui.BeginPopupModal("Route preview", ref open, ImGuiWindowFlags.NoSavedSettings))
+            return;
+
+        var plan = CachedPlan();
+        var byName = _restock.Rows.ToDictionary(r => r.Name, r => r);
+        var totals = new Dictionary<string, long>();
+        var unknown = 0;
+        var items = 0;
+
+        ImGui.BeginChild("##stops", new Vector2(0, -ImGui.GetFrameHeightWithSpacing() * 2.4f));
+
+        for (var i = 0; i < plan.Count; i++)
+        {
+            var stop = plan[i];
+
+            ImGui.TextColored(_config.HoneyTheme ? Honey : new Vector4(0.6f, 0.8f, 1f, 1f),
+                $"{i + 1}. {stop.Vendor.Npc}");
+            ImGui.SameLine();
+            ImGui.TextColored(Dim, $"{stop.Vendor.Zone} [{stop.Vendor.KindName}]");
+
+            if (ImGui.BeginTable($"##stop{i}", 3,
+                    ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.PadOuterX))
+            {
+                ImGui.TableSetupColumn("bait", ImGuiTableColumnFlags.WidthStretch, 2.4f);
+                ImGui.TableSetupColumn("count", ImGuiTableColumnFlags.WidthFixed, 60);
+                ImGui.TableSetupColumn("cost", ImGuiTableColumnFlags.WidthStretch, 1.6f);
+
+                foreach (var name in stop.Baits)
+                {
+                    if (!byName.TryGetValue(name, out var row))
+                        continue;
+
+                    items += row.Missing;
+
+                    ImGui.TableNextRow();
+                    ImGui.TableNextColumn();
+                    ImGui.TextUnformatted(name);
+
+                    ImGui.TableNextColumn();
+                    Centered(row.Missing.ToString(), Wanted);
+
+                    ImGui.TableNextColumn();
+
+                    // Am Marktbrett steht der Preis erst fest, wenn gefragt
+                    // wurde. Vorher zu schaetzen waere geraten.
+                    PriceTag? found = null;
+                    string? wrongCurrency = null;
+
+                    if (stop.IsMarketBoard)
+                    {
+                        if (_market.QuoteFor(row.BaitId) is { UnitPrice: > 0 } quote
+                            && PriceTag.TryParse($"{quote.UnitPrice} gil", out var boardTag))
+                            found = boardTag;
+                    }
+                    else
+                    {
+                        // Alle bekannten Preise, aber nur der zaehlt, dessen
+                        // Waehrung dieser Halt nimmt.
+                        foreach (var candidate in _vendors.PricesFor(row.BaitId))
+                        {
+                            if (!PriceTag.TryParse(candidate, out var tag))
+                                continue;
+
+                            if (tag.FitsVendor(stop.Vendor.Kind))
+                            {
+                                found = tag;
+                                break;
+                            }
+
+                            wrongCurrency ??= tag.Currency;
+                        }
+                    }
+
+                    if (found is { } price)
+                    {
+                        var cost = price.TotalFor(row.Missing);
+                        totals[price.Currency] = totals.GetValueOrDefault(price.Currency) + cost;
+                        Centered($"{cost:N0} {price.Currency}", Dim);
+                    }
+                    else
+                    {
+                        unknown++;
+                        Centered("?", Dim);
+                        if (ImGui.IsItemHovered())
+                            ImGui.SetTooltip(stop.IsMarketBoard
+                                ? "Market board prices are only known once the board has been asked."
+                                : wrongCurrency != null
+                                    ? $"Only a price in {wrongCurrency} is known, and this vendor does not take that."
+                                    : "No price in the game data for this one.");
+                    }
+                }
+
+                ImGui.EndTable();
+            }
+
+            ImGui.Spacing();
+        }
+
+        ImGui.EndChild();
+
+        ImGui.Separator();
+        ImGui.TextUnformatted(plan.Count == 1
+            ? $"1 stop, {items} items"
+            : $"{plan.Count} stops, {items} items");
+
+        if (totals.Count > 0)
+        {
+            ImGui.SameLine();
+            ImGui.TextColored(Dim, "-  " + string.Join(", ", totals
+                .OrderByDescending(t => t.Value)
+                .Select(t => $"{t.Value:N0} {t.Key}")));
+        }
+
+        if (unknown > 0)
+        {
+            ImGui.TextColored(Dim, unknown == 1
+                ? "1 bait has no known price, so it is not in the total."
+                : $"{unknown} baits have no known price, so they are not in the total.");
+        }
+
+        using (ImRaiiDisabled(_travel.Running || _queue.Running || _sweep.Running
+                              || _market.Running || !_travel.Available))
+        {
+            if (ImGui.Button("Start route"))
+            {
+                _route.Start();
+                ImGui.CloseCurrentPopup();
+            }
+        }
+
+        ImGui.SameLine();
+        if (ImGui.Button("Close"))
+            ImGui.CloseCurrentPopup();
+
+        ImGui.EndPopup();
+    }
+
+    /// <summary>Suchfeld ueber der Tabelle.</summary>
+    private void DrawFilter()
+    {
+        ImGui.SetNextItemWidth(220);
+        ImGui.InputTextWithHint("##filter", "Search", ref _filter, 64);
+
+        if (_filter.Length == 0)
+            return;
+
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Clear"))
+            _filter = string.Empty;
+
+        ImGui.SameLine();
+        var shown = _restock.Rows.Count(Matches);
+        ImGui.TextColored(Dim, shown == 1
+            ? $"1 of {_restock.Rows.Count} baits"
+            : $"{shown} of {_restock.Rows.Count} baits");
+    }
+
+    private bool Matches(Restock.Row row) =>
+        _filter.Length == 0 || row.Name.Contains(_filter, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Die Zeilen, wie sie gerade zu zeigen sind: gefiltert und in der
+    /// Reihenfolge, die in der Kopfzeile angeklickt wurde.
+    /// </summary>
+    private unsafe List<Restock.Row> Visible()
+    {
+        var rows = _restock.Rows.Where(Matches).ToList();
+
+        var specs = ImGui.TableGetSortSpecs();
+        if (specs.SpecsCount == 0)
+            return rows;
+
+        var spec = specs.Specs[0];
+        var up = spec.SortDirection == ImGuiSortDirection.Ascending;
+
+        Comparison<Restock.Row> by = spec.ColumnIndex switch
+        {
+            1 => (a, b) => a.Fish.Count.CompareTo(b.Fish.Count),
+            2 => (a, b) => a.Have.CompareTo(b.Have),
+            3 => (a, b) => a.Target.CompareTo(b.Target),
+            4 => (a, b) => a.Missing.CompareTo(b.Missing),
+            _ => (a, b) => string.Compare(a.Name, b.Name, StringComparison.CurrentCultureIgnoreCase),
+        };
+
+        // Bei gleichem Wert nach Namen, sonst springen Zeilen mit gleicher
+        // Fehlmenge bei jedem Bild umher.
+        rows.Sort((a, b) =>
+        {
+            var order = by(a, b);
+            if (order != 0)
+                return up ? order : -order;
+
+            return string.Compare(a.Name, b.Name, StringComparison.CurrentCultureIgnoreCase);
+        });
+
+        return rows;
+    }
+
     private void DrawTable()
     {
         // Waagerechte Linien statt eines Gitters: Die senkrechten Striche
@@ -559,7 +794,7 @@ internal sealed class MainWindow : Window
         // wird.
         const ImGuiTableFlags flags = ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerH
                                       | ImGuiTableFlags.ScrollY | ImGuiTableFlags.SizingStretchProp
-                                      | ImGuiTableFlags.PadOuterX;
+                                      | ImGuiTableFlags.PadOuterX | ImGuiTableFlags.Sortable;
 
         if (!ImGui.BeginTable("##baits", 7, flags))
             return;
@@ -571,15 +806,20 @@ internal sealed class MainWindow : Window
         ImGui.TableSetupColumn("Fish", ImGuiTableColumnFlags.WidthFixed, 42);
         ImGui.TableSetupColumn("Have", ImGuiTableColumnFlags.WidthFixed, 58);
         ImGui.TableSetupColumn("Target", ImGuiTableColumnFlags.WidthFixed, 62);
-        ImGui.TableSetupColumn("Missing", ImGuiTableColumnFlags.WidthFixed, 58);
+        ImGui.TableSetupColumn("Missing",
+            ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.DefaultSort
+            | ImGuiTableColumnFlags.PreferSortDescending, 58);
         // Der Preis ist "5 gil" bis "1920 gil" — mitwachsend war er meist zu
         // drei Vierteln leer. Fest, und der Platz geht an den Koedernamen.
-        ImGui.TableSetupColumn("Price", ImGuiTableColumnFlags.WidthFixed, 82);
-        ImGui.TableSetupColumn("Vendor", ImGuiTableColumnFlags.WidthStretch, 1.3f);
+        // Preis und Haendler bleiben unsortierbar: Der Preis kommt je nach
+        // Zeile aus dem offenen Laden, den Spieldaten oder dem Marktbrett und
+        // ist mal Gil, mal Scrips — eine Reihenfolge daraus waere erfunden.
+        ImGui.TableSetupColumn("Price", ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.NoSort, 82);
+        ImGui.TableSetupColumn("Vendor", ImGuiTableColumnFlags.WidthStretch | ImGuiTableColumnFlags.NoSort, 1.3f);
         ImGui.TableSetupScrollFreeze(0, 1);
         CenteredHeadersRow(7, 1, 5);
 
-        foreach (var row in _restock.Rows)
+        foreach (var row in Visible())
         {
             ImGui.TableNextRow();
             ImGui.PushID((int)row.BaitId);

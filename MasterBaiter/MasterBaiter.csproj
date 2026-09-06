@@ -7,7 +7,7 @@
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Version>0.3.8.0</Version>
+    <Version>0.3.9.0</Version>
     <AssemblyName>MasterBaiter</AssemblyName>
     <RootNamespace>MasterBaiter</RootNamespace>
     <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
@@ -66,6 +66,7 @@
   <ItemGroup>
     <EmbeddedResource Include="..\data\fish-baits.json" LogicalName="MasterBaiter.fish-baits.json" />
     <EmbeddedResource Include="..\data\vendor-locations.json" LogicalName="MasterBaiter.vendor-locations.json" />
+    <EmbeddedResource Include="..\data\bait-prices.json" LogicalName="MasterBaiter.bait-prices.json" />
   </ItemGroup>
 
   <ItemGroup>

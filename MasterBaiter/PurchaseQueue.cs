@@ -216,6 +216,26 @@ internal sealed class PurchaseQueue(Configuration config)
                 amount = affordable;
             }
         }
+        // Und ob es hineinpasst. Ein Kauf ins volle Inventar scheitert genauso
+        // lautlos wie einer ohne Geld: Das Spiel nimmt ihn an, verbucht nichts,
+        // und erst die Frist von fuenf Sekunden verraet es.
+        var space = Restock.FreeSpaceFor(job.BaitId);
+        if (space <= 0)
+        {
+            Plugin.Log.Warning(
+                $"[MasterBaiter] {job.Name}: no room in your inventory, skipped.");
+            Skipped++;
+            _jobs.RemoveAt(0);
+            return;
+        }
+
+        if (space < amount)
+        {
+            Plugin.Log.Information(
+                $"[MasterBaiter] {job.Name}: only room for {space} of {amount}.");
+            amount = space;
+        }
+
         job.Attempts++;
 
         _countBefore = have;
