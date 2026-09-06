@@ -10,6 +10,36 @@ the market board.
 
 ---
 
+## What is new in 0.3.5
+
+**Shorter walks, everywhere.** Only 28 of 452 aetherytes had a position the
+plugin could read, because it looked at the wrong side of the link — a location
+row points at an aetheryte, not the other way round. "The nearest aetheryte" was
+therefore mostly whichever came first in the sheet. In Limsa that meant walking
+149 units to a market board with two others sitting 40 away. Now 101 have a
+position, and the walk there takes eight seconds instead of twenty-three.
+
+**Buying checks the currency first.** Without enough scrips a purchase used to
+be attempted, wait five seconds for a confirmation that never came, and repeat —
+three times per bait. Fifteen baits made that minutes of nothing. The price and
+the currency are in the shop window, so the question can be answered before it
+is asked. Partial funds now buy what they cover instead of nothing.
+
+**A refused teleport no longer loses the stop.** Lifestream sometimes declines
+for a moment; it is now retried for up to 25 seconds. One refusal used to cost a
+vendor carrying nineteen baits.
+
+**"Nothing listed" is said plainly.** A bait with no offers on the market board
+looks exactly like an unanswered query from the outside, so the message names
+both possibilities rather than claiming a cause, and the table shows
+`none listed`.
+
+**Two buttons removed.** `Buy missing` and `Buy on market board` are gone;
+buying happens where the plugin travelled to, through `Run route` or `Go`. The
+per-row `Buy` button at an open shop stays.
+
+---
+
 ## What is new in 0.3.4
 
 **All 188 baits and lures, if you want them.** `Show all fishing tackle` under

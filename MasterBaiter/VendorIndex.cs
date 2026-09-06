@@ -589,6 +589,24 @@ internal sealed class VendorIndex
         if (sheet == null)
             return list;
 
+        // Positionen aus dem Level-Blatt vorziehen.
+        //
+        // Aetheryte.Level ist fast immer leer — von 452 Aetheryten hatten so
+        // nur 28 eine Position. Die Verknuepfung steht in der Gegenrichtung:
+        // Eine Level-Zeile zeigt auf den Aetheryten, nicht umgekehrt. Ohne
+        // diese Suche ist "der naechstgelegene Aetheryt" eine Luege, und in
+        // Limsa wird aus sechs Marktbrettern das erstbeste statt des naechsten.
+        var positions = new Dictionary<uint, Vector3>();
+        var levelSheet = Plugin.DataManager.GetExcelSheet<Level>();
+        if (levelSheet != null)
+            foreach (var level in levelSheet)
+            {
+                var objId = level.Object.RowId;
+                if (objId == 0 || positions.ContainsKey(objId))
+                    continue;
+                positions[objId] = new Vector3(level.X, level.Y, level.Z);
+            }
+
         var withPosition = 0;
         var shards = 0;
         foreach (var a in sheet)
@@ -616,9 +634,14 @@ internal sealed class VendorIndex
                 if (levelRef.ValueNullable is not { } level)
                     continue;
                 position = new Vector3(level.X, level.Y, level.Z);
-                withPosition++;
                 break;
             }
+
+            if (position == Vector3.Zero && positions.TryGetValue(a.RowId, out var found))
+                position = found;
+
+            if (position != Vector3.Zero)
+                withPosition++;
 
             list.Add(new AetheryteSpot(a.RowId, name, territory, position, !a.IsAetheryte, a.AethernetGroup));
         }

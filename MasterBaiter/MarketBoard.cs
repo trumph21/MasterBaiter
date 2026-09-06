@@ -40,6 +40,17 @@ internal sealed unsafe class MarketBoard(Configuration config, Restock restock)
     /// drosseln. Ein zweiter Anlauf nach ein paar Sekunden hilft dann.
     /// </summary>
     private const int SearchTries = 2;
+
+    /// <summary>
+    /// Mindestabstand zwischen zwei Suchanfragen.
+    ///
+    /// Aus dem Protokoll abgelesen, nicht geschaetzt: Die zweite Abfrage eines
+    /// Durchlaufs kam jeweils rund dreizehn Millisekunden nach dem Ergebnis der
+    /// ersten — und blieb unbeantwortet. Alle Abfragen mit zwei Sekunden oder
+    /// mehr Abstand kamen zurueck. Es traf immer denselben Koeder, weil er
+    /// immer an zweiter Stelle stand; am Koeder lag es nie.
+    /// </summary>
+    private const int SearchCooldownMs = 3000;
     private const int ListingSettleMs = 1000;
     private const uint GilItemId = 1;
 
@@ -57,6 +68,7 @@ internal sealed unsafe class MarketBoard(Configuration config, Restock restock)
     private uint _requestedFor;
     private long _requestDeadline;
     private int _searchTries;
+    private long _lastSearchAt;
     private long _settledAt;
 
     public bool Running { get; private set; }
@@ -189,6 +201,15 @@ internal sealed unsafe class MarketBoard(Configuration config, Restock restock)
         {
             // Einmal die spieleigene Abfrage anstossen: Suchitem setzen,
             // RequestData rufen. Derselbe Weg, den das Spiel selbst nimmt.
+            // Das Marktbrett beantwortet zu dicht aufeinanderfolgende Anfragen
+            // nicht. Lieber drei Sekunden warten als eine Antwort verlieren und
+            // danach zweimal vergeblich nachfragen.
+            if (now - _lastSearchAt < SearchCooldownMs)
+            {
+                _nextAt = now + DelayMs;
+                return;
+            }
+
             if (_requestedFor != baitId)
             {
                 _requestedFor = baitId;
@@ -219,9 +240,17 @@ internal sealed unsafe class MarketBoard(Configuration config, Restock restock)
             // hier unbegrenzt darauf, dass der Spieler selbst sucht — eine Route
             // blieb damit stehen, ohne es zu sagen. Ein uebersprungener Koeder
             // ist besser als ein Halt, der nie endet.
+            // Zwei Faelle, die von aussen gleich aussehen: Es gibt kein einziges
+            // Angebot, oder das Brett hat nicht geantwortet. Der Datenspeicher
+            // meldet beide Male "pending" und null Eintraege — deshalb nennt die
+            // Meldung beide, statt eine Ursache zu behaupten.
             Plugin.Log.Warning(
-                $"[MasterBaiter] {Restock.ItemName(baitId)}: the market board never answered, skipped " +
-                $"(pending={proxy->WaitingForListings}, count={proxy->ListingCount}).");
+                $"[MasterBaiter] {Restock.ItemName(baitId)}: nothing listed, or the market board did " +
+                $"not answer. Skipped (pending={proxy->WaitingForListings}, count={proxy->ListingCount}).");
+
+            // In der Tabelle als "none listed" vermerken. Ohne das steht dort
+            // weiter ein Strich, und man fragt sich, ob ueberhaupt gesucht wurde.
+            _quotes[baitId] = new Quote(0, 0, DateTime.Now);
             _queue.RemoveAt(0);
             _requestedFor = 0;
             _settledAt = 0;
@@ -303,7 +332,13 @@ internal sealed unsafe class MarketBoard(Configuration config, Restock restock)
     private void Ask(InfoProxyItemSearch* proxy, uint baitId, long now)
     {
         _searchTries++;
+        _lastSearchAt = now;
         _requestDeadline = now + SearchTimeoutMs;
+
+        // Alte Angebote wegraeumen, damit die neue Suche nicht auf Resten der
+        // vorigen aufsetzt. Ordnung, kein Heilmittel: Ein Koeder ohne Angebote
+        // bleibt auch danach unbeantwortet.
+        proxy->ClearListData();
         proxy->SearchItemId = baitId;
         var accepted = proxy->RequestData();
         Plugin.Log.Information(

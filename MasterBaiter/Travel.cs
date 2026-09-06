@@ -15,10 +15,16 @@ namespace MasterBaiter;
 /// </summary>
 internal sealed class Travel
 {
-    private enum Step { Idle, Teleporting, WaitingForZone, Aethernet, WaitingForDistrict, Pathfinding, Walking, Interacting, WaitingForShop, Done, Failed }
+    private enum Step { Idle, WaitingToTeleport, Teleporting, WaitingForZone, Aethernet, WaitingForDistrict, Pathfinding, Walking, Interacting, WaitingForShop, Done, Failed }
 
     private const float ArrivalRange = 3.5f;   // so nah wollen wir an den NPC
     private const int ZoneTimeoutMs = 45_000;
+
+    /// <summary>Abstand zwischen zwei Teleportversuchen.</summary>
+    private const int TeleportRetryMs = 2500;
+
+    /// <summary>So lange wird es versucht, bevor der Halt scheitert.</summary>
+    private const int TeleportRetryWindowMs = 25_000;
     private const int WalkTimeoutMs = 300_000;
     private const int InteractTimeoutMs = 40_000;
     private const int ZoneGraceMs = 8_000;
@@ -164,17 +170,20 @@ internal sealed class Travel
             return;
         }
 
-        try
+        // Ein abgelehnter Teleport ist meist voruebergehend: im Kampf, beim
+        // Reiten, waehrend eines Gespraechs oder unmittelbar nach dem Schliessen
+        // eines Fensters. Frueher scheiterte der Halt daran sofort — bei einer
+        // Route hiess das, einen ganzen Haendler auszulassen.
+        //
+        // Warum Lifestream ablehnt, sagt die Schnittstelle nicht. Deshalb steht
+        // der Zustand des Charakters im Protokoll: Daran ist ablesbar, was
+        // gerade blockiert, statt es zu raten.
+        if (!TryTeleport(vendor))
         {
-            if (!_lsTeleport.InvokeFunc(vendor.AetheryteId, 0))
-            {
-                Fail("Lifestream refused the teleport.");
-                return;
-            }
-        }
-        catch (Exception ex)
-        {
-            Fail($"Lifestream not available: {ex.Message}");
+            _step = Step.WaitingToTeleport;
+            _deadline = Environment.TickCount64 + TeleportRetryWindowMs;
+            _nextActionAt = Pacing.Next(TeleportRetryMs);
+            Status = $"Waiting to teleport to {vendor.AetheryteName}.";
             return;
         }
 
@@ -205,6 +214,27 @@ internal sealed class Travel
 
         switch (_step)
         {
+            case Step.WaitingToTeleport:
+                if (Environment.TickCount64 > _deadline)
+                {
+                    Fail($"Lifestream would not teleport to {_target.AetheryteName}. {Blockers()}");
+                    return;
+                }
+
+                if (Environment.TickCount64 < _nextActionAt)
+                    return;
+
+                if (!TryTeleport(_target))
+                {
+                    _nextActionAt = Pacing.Next(TeleportRetryMs);
+                    return;
+                }
+
+                Status = $"Teleporting to {_target.AetheryteName}.";
+                _step = Step.Teleporting;
+                _deadline = Environment.TickCount64 + ZoneTimeoutMs;
+                return;
+
             case Step.Teleporting:
                 bool busy;
                 try { busy = _lsBusy.InvokeFunc(); }
@@ -542,6 +572,73 @@ internal sealed class Travel
         targets->InteractWithObject(native, false);
         Plugin.Log.Information($"[MasterBaiter] Talked to {_target.Npc} at {bestDistance:0.0} distance.");
         return true;
+    }
+
+    /// <summary>
+    /// Loest den Teleport aus. Gibt false zurueck, wenn Lifestream ablehnt —
+    /// und schreibt dann auf, was am Charakter gerade dagegen sprechen koennte.
+    /// </summary>
+    private bool TryTeleport(VendorIndex.Vendor vendor)
+    {
+        // Lifestream lehnt ab, solange es noch mit etwas anderem beschaeftigt
+        // ist — und genau das ist der Grund, warum der erste Versuch jedes Mal
+        // scheiterte: Er kam unmittelbar nach dem Schliessen des Ladenfensters
+        // oder dem Ende der vorigen Fahrt. Die Zustandsflags des Charakters
+        // zeigen davon nichts, deshalb stand dort "nothing obvious".
+        try
+        {
+            if (_lsBusy.InvokeFunc())
+            {
+                // Auf Information, nicht Debug: Sonst laesst sich nicht
+                // unterscheiden, ob die Pruefung gegriffen hat oder Lifestream
+                // aus einem anderen Grund ablehnt.
+                Plugin.Log.Information("[MasterBaiter] Lifestream is still busy; waiting.");
+                return false;
+            }
+        }
+        catch
+        {
+            // Antwortet es nicht, wird der Teleport es zeigen.
+        }
+
+        try
+        {
+            if (_lsTeleport.InvokeFunc(vendor.AetheryteId, 0))
+                return true;
+        }
+        catch (Exception ex)
+        {
+            Fail($"Lifestream not available: {ex.Message}");
+            return false;
+        }
+
+        Plugin.Log.Information(
+            $"[MasterBaiter] Lifestream refused the teleport to {vendor.AetheryteName}. {Blockers()}");
+        return false;
+    }
+
+    /// <summary>Was am Charakter gerade einen Teleport verhindern koennte.</summary>
+    private static string Blockers()
+    {
+        var conditions = Plugin.Condition;
+        var flags = new[]
+        {
+            Dalamud.Game.ClientState.Conditions.ConditionFlag.InCombat,
+            Dalamud.Game.ClientState.Conditions.ConditionFlag.Casting,
+            Dalamud.Game.ClientState.Conditions.ConditionFlag.Mounted,
+            Dalamud.Game.ClientState.Conditions.ConditionFlag.Occupied,
+            Dalamud.Game.ClientState.Conditions.ConditionFlag.Occupied33,
+            Dalamud.Game.ClientState.Conditions.ConditionFlag.OccupiedInEvent,
+            Dalamud.Game.ClientState.Conditions.ConditionFlag.OccupiedInQuestEvent,
+            Dalamud.Game.ClientState.Conditions.ConditionFlag.BetweenAreas,
+            Dalamud.Game.ClientState.Conditions.ConditionFlag.BoundByDuty,
+            Dalamud.Game.ClientState.Conditions.ConditionFlag.Jumping,
+        };
+
+        var active = flags.Where(f => conditions[f]).Select(f => f.ToString()).ToList();
+        return active.Count == 0
+            ? "Nothing obvious is blocking it."
+            : $"Active: {string.Join(", ", active)}.";
     }
 
     private void Arrive()

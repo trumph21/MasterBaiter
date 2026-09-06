@@ -172,8 +172,8 @@ internal sealed class PurchaseQueue(Configuration config)
             return;
         }
 
-        var index = FindIndex(job.BaitId);
-        if (index < 0)
+        var entry = FindEntry(job.BaitId);
+        if (entry is not { } shopEntry)
         {
             Plugin.Log.Warning($"[MasterBaiter] {job.Name} is not in the shop window, skipped.");
             Skipped++;
@@ -181,7 +181,41 @@ internal sealed class PurchaseQueue(Configuration config)
             return;
         }
 
+        var index = shopEntry.Index;
         var amount = Math.Min(job.Target - have, MaxPerCall);
+
+        // Vorher nachrechnen, ob die Waehrung reicht.
+        //
+        // Ohne das versucht der Kauf, scheitert lautlos, und erst die Frist von
+        // fuenf Sekunden verraet es — dreimal je Koeder. Bei fuenfzehn Koedern
+        // ohne genug Scrips sind das Minuten, in denen nichts geschieht. Preis
+        // und Waehrung stehen im Fenster; die Frage laesst sich beantworten,
+        // bevor man sie stellt.
+        if (shopEntry.Price > 0)
+        {
+            var currencyId = shopEntry.CurrencyId != 0 ? shopEntry.CurrencyId : GilItemId;
+            var available = Restock.CountInInventory(currencyId);
+            var affordable = available / (int)shopEntry.Price;
+
+            if (affordable <= 0)
+            {
+                Plugin.Log.Warning(
+                    $"[MasterBaiter] {job.Name}: not enough {Restock.ItemName(currencyId)} " +
+                    $"({available} of {shopEntry.Price} needed for one), skipped.");
+                Skipped++;
+                _jobs.RemoveAt(0);
+                return;
+            }
+
+            // So viel, wie bezahlbar ist — lieber weniger kaufen als gar nichts.
+            if (affordable < amount)
+            {
+                Plugin.Log.Information(
+                    $"[MasterBaiter] {job.Name}: {available} {Restock.ItemName(currencyId)} " +
+                    $"only covers {affordable} of {amount}.");
+                amount = affordable;
+            }
+        }
         job.Attempts++;
 
         _countBefore = have;
@@ -233,11 +267,15 @@ internal sealed class PurchaseQueue(Configuration config)
             $"attempt {job.Stalls} of {MaxStalls}.");
     }
 
-    private static int FindIndex(uint itemId)
+    /// <summary>Gil-Item-Id, fuer Laeden ohne eigene Waehrung.</summary>
+    private const uint GilItemId = 1;
+
+    /// <summary>Der Eintrag des Koeders im offenen Fenster, oder null.</summary>
+    private static ShopWindowReader.ShopEntry? FindEntry(uint itemId)
     {
-        foreach (var e in ShopWindowReader.ReadEntries())
-            if (e.ItemId == itemId)
-                return e.Index;
-        return -1;
+        foreach (var entry in ShopWindowReader.ReadEntries())
+            if (entry.ItemId == itemId)
+                return entry;
+        return null;
     }
 }

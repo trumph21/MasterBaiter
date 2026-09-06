@@ -113,15 +113,11 @@ internal sealed class MainWindow : Window
         ImGui.SameLine();
 
         var shopOpen = ShopWindowReader.IsOpen;
-        var scrip = ShopWindowReader.Kind == "scrip exchange";
 
-        // Der Scrip-Tausch zeigt immer nur einen Reiter. Was fehlt, kann auf
-        // einem anderen liegen, deshalb zaehlt hier der gesamte Bedarf und
-        // nicht nur das sichtbare Blatt.
-        var buyable = scrip
-            ? _restock.Rows.Count(r => !r.Ignored && r.Missing > 0)
-            : _restock.Rows.Count(r => r is { Ignored: false, InShop: true } && r.Missing > 0);
-
+        // Kein "Buy missing" mehr. Gekauft wird, wo das Plugin selbst
+        // hingefahren ist — ueber "Run route" oder "Go" mit "buy on arrival".
+        // Fuer den Einzelfall am offenen Laden bleibt der Buy-Knopf in der
+        // jeweiligen Zeile.
         if (_queue.Running || _sweep.Running)
         {
             if (ImGui.Button("Cancel"))
@@ -129,45 +125,19 @@ internal sealed class MainWindow : Window
                 _sweep.Stop("Stopped.");
                 _queue.Stop("Stopped.");
             }
-        }
-        else
-        {
-            using (ImRaiiDisabled(!shopOpen || buyable == 0))
-            {
-                if (ImGui.Button(buyable > 0 ? $"Buy missing ({buyable})" : "Buy missing"))
-                {
-                    if (scrip)
-                        _sweep.Start();
-                    else
-                        _queue.Start(_restock.Rows);
-                }
-            }
-            if (scrip && ImGui.IsItemHovered())
-                ImGui.SetTooltip("Walks through every category and subcategory of the exchange and buys on each.");
+
+            ImGui.SameLine();
         }
 
-        if (_config.UseMarketBoard)
+        // Kein eigener Marktbrett-Knopf mehr: Die Route nimmt das Brett als
+        // letzten Halt mit, und "buy on arrival" loest den Kauf dort aus. Ein
+        // Knopf, der nur greift, waehrend man selbst davorsteht, war die
+        // Ausnahme und nicht die Regel.
+        if (_market.Running)
         {
             ImGui.SameLine();
-            var marketOpen = MarketBoard.IsOpen;
-            var onBoard = marketOpen ? MarketBoard.Candidates(_restock.Rows, _vendors).Count() : 0;
-
-            if (_market.Running)
-            {
-                if (ImGui.Button("Stop market board"))
-                    _market.Stop("Stopped.");
-            }
-            else
-            {
-                using (ImRaiiDisabled(!marketOpen || onBoard == 0))
-                {
-                    if (ImGui.Button(onBoard > 0 ? $"Buy on market board ({onBoard})" : "Buy on market board"))
-                        _market.Start(_restock.Rows, _vendors);
-                }
-                if (ImGui.IsItemHovered())
-                    ImGui.SetTooltip("Searches, waits for the listings and buys, one bait after another, " +
-                                     "within your price limits.");
-            }
+            if (ImGui.Button("Stop market board"))
+                _market.Stop("Stopped.");
         }
 
         ImGui.SameLine();
@@ -637,7 +607,7 @@ internal sealed class MainWindow : Window
                             : $"{(int)age.TotalHours} h ago";
                     ImGui.SetTooltip(quote.UnitPrice > 0
                         ? $"Cheapest of {quote.Listings} market board listings, seen {ago}."
-                        : $"Nothing was listed when checked {ago}.");
+                        : $"Nothing was listed when checked {ago} — or the board did not answer.");
                 }
             }
             else
