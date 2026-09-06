@@ -119,10 +119,13 @@ coordinates for the NPCs the game’s own location sheet does not place.
 <!-- /repo-only -->
 ## Installation
 
+Download the latest ZIP from the
+[releases page](https://github.com/trumph21/MasterBaiter/releases).
+
 This is a dev plugin, so it is not installed through the plugin installer's
 search. It takes one setup step.
 
-1. **Unpack** this folder somewhere permanent — moving it later breaks the link:
+1. **Unpack** it somewhere permanent — moving it later breaks the link:
 
    ```
    C:\Plugins\MasterBaiter\
