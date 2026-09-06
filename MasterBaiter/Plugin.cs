@@ -141,7 +141,12 @@ public sealed class Plugin : IDalamudPlugin
         {
             HelpMessage = "Shows missing fishing bait from your GatherBuddy list and restocks it at a vendor.",
         });
-        Services.CommandManager.AddHandler(CommandShort, new CommandInfo(OnCommand) { ShowInHelp = false });
+        // Auch die Kurzform gehoert in /xlhelp. Wer sie dort nicht liest,
+        // erfaehrt nie, dass es sie gibt.
+        Services.CommandManager.AddHandler(CommandShort, new CommandInfo(OnCommand)
+        {
+            HelpMessage = "The same, in fewer letters.",
+        });
 
         Log.Information($"[MasterBaiter] loaded, {baits.FishCount} fish in the bait table.");
 

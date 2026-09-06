@@ -10,6 +10,14 @@ the market board.
 
 ---
 
+## What is new in 0.3.7
+
+**`/mbait` appears in `/xlhelp`.** The short form has always worked, but it was
+registered as hidden, so the only way to learn it was to read the installer
+description. A command nobody can find is not a command.
+
+---
+
 ## What is new in 0.3.6
 
 A pass over the window. Nothing about what the plugin does changed.
