@@ -44,8 +44,8 @@ if (!versionMatch) fail("no <Version> in MasterBaiter.csproj");
 const version = versionMatch.slice(1, 4).join(".");
 
 // ---- DLL ----
-const dll = path.join(root, "MasterBaiter", "bin", "MasterBaiter.dll");
-if (!fs.existsSync(dll)) fail("MasterBaiter/bin/MasterBaiter.dll is missing — build first");
+const dll = path.join(root, "MasterBaiter", "bin", "Release", "MasterBaiter.dll");
+if (!fs.existsSync(dll)) fail("MasterBaiter/bin/Release/MasterBaiter.dll is missing — build first");
 
 // ---- Manifest, Version gegenpruefen ----
 const manifestPath = path.join(root, "MasterBaiter", "MasterBaiter.json");

@@ -325,6 +325,17 @@ internal sealed class MainWindow : Window
         if (ImGui.IsItemHovered())
             ImGui.SetTooltip("After travelling, start buying as soon as the shop opens.");
 
+        var chat = _config.ChatFeedback;
+        if (ImGui.Checkbox("Report in chat", ref chat))
+        {
+            _config.ChatFeedback = chat;
+            _config.Save();
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("One line in the game chat when a run or a route finishes." +
+                             Environment.NewLine +
+                             "Only you see it. Everything else stays in /xllog.");
+
         var useSprint = _config.UseSprint;
         if (ImGui.Checkbox("Use Sprint", ref useSprint))
         {

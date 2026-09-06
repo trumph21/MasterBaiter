@@ -132,6 +132,16 @@ XIVLauncher installation, because the build references the Dalamud libraries in
 `%APPDATA%XIVLauncheraddonHooksdev`. The result lands in
 `MasterBaiter/bin/`.
 
+Tests cover the rules where a mistake is expensive or silent — which listing to
+buy, which menu entry leads to the bait, how the delays scale:
+
+```bash
+cd tests/MasterBaiter.Tests && dotnet test -c Release
+```
+
+Use `-c Release`. A debug run writes to `bin/Debug/` and leaves the
+release build alone, which is what a running game has loaded.
+
 Packaging is `node tools/package.js`: it copies the DLL and the manifest,
 generates the shipped README from this one, and writes the ZIP to `dist/`.
 Nothing under `dist/` is kept in the repository — the ZIP is published as a

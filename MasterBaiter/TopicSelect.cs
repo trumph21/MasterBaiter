@@ -74,56 +74,14 @@ internal static unsafe class TopicSelect
     }
 
     /// <summary>
-    /// Waehlt die Zeile, die am ehesten in einen Warenladen fuehrt. Zeilen mit
-    /// Werkzeug oder Ausruestung werden abgewertet, denn Koeder liegen bei den
-    /// allgemeinen Waren.
+    /// Waehlt die Zeile, die am ehesten in einen Warenladen fuehrt.
+    /// Die Regel selbst steht in <see cref="MenuScoring"/>, damit sie ohne
+    /// Spiel geprueft werden kann.
     /// </summary>
     public static int BestEntry(IReadOnlyList<string> entries)
-        => BestEntry(entries, out _);
+        => MenuScoring.Best(entries, out _);
 
-    /// <summary>Wie <see cref="BestEntry(IReadOnlyList{string})"/>, gibt zusaetzlich die Bewertung aus.</summary>
+    /// <summary>Wie <see cref="BestEntry(IReadOnlyList{string})"/>, mit der Bewertung fuers Protokoll.</summary>
     public static int BestEntry(IReadOnlyList<string> entries, out string scores)
-    {
-        var best = -1;
-        var bestScore = int.MinValue;
-        var report = new List<string>();
-
-        for (var i = 0; i < entries.Count; i++)
-        {
-            var text = entries[i].ToLowerInvariant();
-            if (text.Length == 0)
-                continue;
-
-            // "Purchase Items" beim Kraemer, "Cosmocredit Exchange" im
-            // Cosmic-Exploration-Gebiet — beides fuehrt in einen Warenladen.
-            if (!text.Contains("purchase") && !text.Contains("buy") && !text.Contains("shop")
-                && !text.Contains("exchange") && !text.Contains("trade"))
-                continue;
-
-            var score = 10;
-            if (text.Contains("item")) score += 20;      // die Zeile mit den Waren
-            if (text.Contains("bait")) score += 25;      // "… (Lv. 80 Materials/Bait/Tokens)"
-            if (text.Contains("scrip")) score += 25;     // "Purchase items with … Scrips"
-            if (text.Contains("tool")) score -= 15;
-            if (text.Contains("token")) score -= 10;     // Token-Tausch, keine Koeder
-            if (text.Contains("gear") || text.Contains("armor") || text.Contains("weapon")) score -= 15;
-
-            // Nicht nach "materia" oder "material" abwerten: Beim
-            // Cosmocredit-Tausch liegen die Koeder ausgerechnet unter
-            // "(Materials/Materia/Items)". Der Menuetext sagt eben nicht
-            // zuverlaessig, was im Laden steht — deshalb steht die Bewertung im
-            // Log, damit eine Fehlwahl nachvollziehbar bleibt.
-
-            report.Add($"{entries[i]}={score}");
-
-            if (score > bestScore)
-            {
-                bestScore = score;
-                best = i;
-            }
-        }
-
-        scores = string.Join(", ", report);
-        return best;
-    }
+        => MenuScoring.Best(entries, out scores);
 }

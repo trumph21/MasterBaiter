@@ -12,7 +12,7 @@ namespace MasterBaiter;
 /// spaeter. Wer sofort nachzaehlt, sieht faelschlich einen Zugewinn von null
 /// und haelt einen funktionierenden Kauf fuer gescheitert.
 /// </summary>
-internal sealed class PurchaseQueue
+internal sealed class PurchaseQueue(Configuration config)
 {
     private sealed class Job
     {
@@ -106,6 +106,12 @@ internal sealed class PurchaseQueue
             Status = $"Done. {Bought} purchases" + (Skipped > 0 ? $", {Skipped} baits skipped." : ".");
             Plugin.Log.Information($"[MasterBaiter] Run finished: {Bought} purchases, {Skipped} skipped, " +
                                    $"{_totalItems} items total.");
+
+            // Nur melden, wenn tatsaechlich etwas geschehen ist — ein "0 gekauft"
+            // nach jedem Ladenbesuch waere Laerm.
+            if (_totalItems > 0)
+                ChatReport.Say(config, $"Bought {_totalItems} items" +
+                                       (Skipped > 0 ? $", {Skipped} bait(s) skipped." : "."));
             return;
         }
 

@@ -13,7 +13,7 @@ namespace MasterBaiter;
 /// <see cref="PurchaseQueue"/>. Der Durchlauf wartet jede Seite ab, bevor er
 /// weiterblaettert — zwei Kaufschlangen gleichzeitig gehen schief.
 /// </summary>
-internal sealed class ScripSweep(Restock restock, PurchaseQueue queue, VendorIndex vendors)
+internal sealed class ScripSweep(Configuration config, Restock restock, PurchaseQueue queue, VendorIndex vendors)
 {
     private enum Step { OpenCategory, OpenSubCategory, BuyPage }
 
@@ -190,6 +190,10 @@ internal sealed class ScripSweep(Restock restock, PurchaseQueue queue, VendorInd
                  + (_skippedCategories > 0 ? $", {_skippedCategories} categories skipped" : string.Empty)
                  + (_skipped > 0 ? $", {_skipped} baits skipped." : ".");
         Plugin.Log.Information($"[MasterBaiter] {Status}" + (reason != null ? $" ({reason})" : string.Empty));
+
+        if (_bought > 0)
+            ChatReport.Say(config, $"Scrip exchange: {_bought} purchases across {_pages} tabs.");
+
         restock.Refresh();
     }
 }

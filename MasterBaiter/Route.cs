@@ -139,6 +139,7 @@ internal sealed class Route(Configuration config, Restock restock, VendorIndex v
         {
             Status = $"Route finished, {_stops.Count} stops.";
             Plugin.Log.Information($"[MasterBaiter] {Status}");
+            ChatReport.Say(config, $"Route finished, {_stops.Count} stops.");
             Enter(State.Idle);
             return;
         }
@@ -218,6 +219,7 @@ internal sealed class Route(Configuration config, Restock restock, VendorIndex v
                 if (!ShopWindowReader.IsOpen)
                 {
                     Plugin.Log.Warning($"[MasterBaiter] Stop {_index + 1} failed: {travel.Status}");
+                    ChatReport.Warn(config, $"Stop {_index + 1} failed: {travel.Status}");
                     Advance();
                     return;
                 }
@@ -259,6 +261,7 @@ internal sealed class Route(Configuration config, Restock restock, VendorIndex v
                 if (!MarketBoard.IsOpen)
                 {
                     Plugin.Log.Warning($"[MasterBaiter] Stop {_index + 1} failed: {travel.Status}");
+                    ChatReport.Warn(config, $"Stop {_index + 1} failed: {travel.Status}");
                     Advance();
                     return;
                 }

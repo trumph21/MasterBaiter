@@ -75,6 +75,9 @@ internal sealed class Configuration : IPluginConfiguration
     /// </summary>
     public int PacingPercent { get; set; } = 100;
 
+    /// <summary>Kurze Rueckmeldung im Spielchat statt nur im Log.</summary>
+    public bool ChatFeedback { get; set; } = true;
+
     /// <summary>Sprint einsetzen, solange das Plugin den Charakter bewegt.</summary>
     public bool UseSprint { get; set; }
 

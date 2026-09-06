@@ -69,8 +69,8 @@ public sealed class Plugin : IDalamudPlugin
         vendors.BuildAsync(baits.AllBaitIds);
         var restock = new Restock(_config, baits, new GatherList());
         _restock = restock;
-        _queue = new PurchaseQueue();
-        _sweep = new ScripSweep(restock, _queue, vendors);
+        _queue = new PurchaseQueue(_config);
+        _sweep = new ScripSweep(_config, restock, _queue, vendors);
         _market = new MarketBoard(_config, restock);
         _travel = new Travel();
         _cosmic = new CosmicTravel(_config, _travel, vendors);

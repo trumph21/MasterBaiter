@@ -13,10 +13,18 @@
     <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
-    <OutputPath>bin\</OutputPath>
+    <!-- Getrennt je Konfiguration. Vorher schrieben Debug und Release in
+         dasselbe bin\, sodass ein Testlauf — der in Debug baut — die geladene
+         Release-DLL ueberschrieb. -->
+    <OutputPath>bin\$(Configuration)\</OutputPath>
     <RestorePackages>false</RestorePackages>
     <EnableDynamicLoading>true</EnableDynamicLoading>
   </PropertyGroup>
+
+  <!-- Die geprueften Regeln sind intern; das Testprojekt darf sie sehen. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="MasterBaiter.Tests" />
+  </ItemGroup>
 
   <!-- Dalamud-Bibliotheken aus der lokalen XIVLauncher-Installation -->
   <PropertyGroup Condition="'$(DALAMUD_HOME)' == ''">

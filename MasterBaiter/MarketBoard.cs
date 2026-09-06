@@ -346,91 +346,40 @@ internal sealed unsafe class MarketBoard(Configuration config, Restock restock)
     /// Das guenstigste bezahlbare Angebot. Bei gleichem Stueckpreis gewinnt das
     /// kleinere, damit der Bedarf nicht weit ueberschritten wird.
     /// </summary>
+    /// <summary>
+    /// Die Angebote des Fensters als schlichte Werte. Ab hier ist die Auswahl
+    /// reine Rechnung und steckt in <see cref="ListingChoice"/>, wo sie sich
+    /// ohne Spiel pruefen laesst.
+    /// </summary>
+    private static List<ListingChoice.Offer> Offers(InfoProxyItemSearch* proxy)
+    {
+        var result = new List<ListingChoice.Offer>();
+        var listings = proxy->Listings;
+        var count = Math.Min((int)proxy->ListingCount, listings.Length);
+
+        for (var i = 0; i < count; i++)
+        {
+            ref var listing = ref listings[i];
+            result.Add(new ListingChoice.Offer(i, listing.ItemId, listing.UnitPrice, listing.Quantity));
+        }
+
+        return result;
+    }
+
     private int BestListing(InfoProxyItemSearch* proxy, int needed, int budget,
         out uint unitPrice, out uint quantity)
     {
-        unitPrice = 0;
-        quantity = 0;
-        var best = -1;
-
-        var listings = proxy->Listings;
-        var count = Math.Min((int)proxy->ListingCount, listings.Length);
-
-        for (var i = 0; i < count; i++)
-        {
-            ref var listing = ref listings[i];
-            if (listing.ItemId == 0 || listing.Quantity == 0)
-                continue;
-            if (listing.UnitPrice > (uint)config.MarketMaxUnitPrice)
-                continue;
-
-            // Gekauft wird immer der ganze Stapel. Passt er nicht ins Budget,
-            // faellt nur dieses Angebot weg — nicht der ganze Durchlauf.
-            if ((long)listing.UnitPrice * listing.Quantity > budget)
-                continue;
-
-            // Nie mehr kaufen als fehlt. Ein Stapel ist unteilbar, also ist ein
-            // zu grosser schlicht kein Angebot — auch nicht als letzte
-            // Moeglichkeit. Sonst kostet ein Ziel von zehn Stueck den Preis von
-            // neunundneunzig.
-            if (listing.Quantity > needed)
-                continue;
-
-            // Unter den passenden der guenstigste je Stueck; bei gleichem Preis
-            // der groessere, der bringt den Bestand in einem Kauf weiter.
-            var better = best < 0
-                         || listing.UnitPrice < unitPrice
-                         || (listing.UnitPrice == unitPrice && listing.Quantity > quantity);
-            if (!better)
-                continue;
-
-            best = i;
-            unitPrice = listing.UnitPrice;
-            quantity = listing.Quantity;
-        }
-
-        return best;
+        var pick = ListingChoice.Best(Offers(proxy), needed, config.MarketMaxUnitPrice, budget);
+        unitPrice = pick?.UnitPrice ?? 0;
+        quantity = pick?.Quantity ?? 0;
+        return pick?.Index ?? -1;
     }
 
-    /// <summary>Der kleinste angebotene Stapel innerhalb der Preisgrenze.</summary>
     private static uint SmallestStack(InfoProxyItemSearch* proxy, uint itemId, uint maxUnitPrice)
-    {
-        uint smallest = 0;
-        var listings = proxy->Listings;
-        var count = Math.Min((int)proxy->ListingCount, listings.Length);
+        => ListingChoice.SmallestStack(Offers(proxy), itemId, maxUnitPrice);
 
-        for (var i = 0; i < count; i++)
-        {
-            ref var listing = ref listings[i];
-            if (listing.ItemId != itemId || listing.Quantity == 0)
-                continue;
-            if (listing.UnitPrice > maxUnitPrice)
-                continue;
-            if (smallest == 0 || listing.Quantity < smallest)
-                smallest = listing.Quantity;
-        }
-
-        return smallest;
-    }
-
-    /// <summary>Der guenstigste Stueckpreis, ohne Ruecksicht auf die Grenze.</summary>
     private static uint Cheapest(InfoProxyItemSearch* proxy, uint itemId)
-    {
-        uint cheapest = 0;
-        var listings = proxy->Listings;
-        var count = Math.Min((int)proxy->ListingCount, listings.Length);
-
-        for (var i = 0; i < count; i++)
-        {
-            ref var listing = ref listings[i];
-            if (listing.ItemId != itemId || listing.Quantity == 0)
-                continue;
-            if (cheapest == 0 || listing.UnitPrice < cheapest)
-                cheapest = listing.UnitPrice;
-        }
-
-        return cheapest;
-    }
+        => ListingChoice.Cheapest(Offers(proxy), itemId);
 
     private void Finish(string reason)
     {
@@ -438,6 +387,12 @@ internal sealed unsafe class MarketBoard(Configuration config, Restock restock)
         _queue.Clear();
         Status = $"Market board: {Bought} purchases, {Spent} gil. {reason}";
         Plugin.Log.Information($"[MasterBaiter] {Status}");
+
+        // Hier immer melden, auch bei null Kaeufen: Es ging um Gil, und wer
+        // eine Route laufen laesst, will wissen, ob welches ausgegeben wurde.
+        ChatReport.Say(config, Bought > 0
+            ? $"Market board: {Bought} purchases for {Spent:N0} gil."
+            : "Market board: nothing bought within your limits.");
         restock.Refresh();
     }
 }
