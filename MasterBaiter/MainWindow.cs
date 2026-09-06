@@ -250,13 +250,17 @@ internal sealed class MainWindow : Window
         if (!_vendors.Ready || _restock.Rows.Count == 0)
             return;
 
-        var orphans = _restock.Rows.Where(r => _vendors.For(r.BaitId).Count == 0
-                                               && _vendors.OtherSourcesFor(r.BaitId).Count == 0
-                                               && _vendors.RecipeFor(r.BaitId) == null).ToList();
+        // Nur die Koeder, die deine Fische brauchen. Sind alle aufgelistet,
+        // waeren sonst hundert Event- und Belohnungskoeder ohne Quelle dabei,
+        // und die Zeile sähe nach einem Rueckschritt aus, obwohl nichts fehlt.
+        var relevant = _restock.Rows.Where(r => r.Needed).ToList();
+        var orphans = relevant.Where(r => _vendors.For(r.BaitId).Count == 0
+                                          && _vendors.OtherSourcesFor(r.BaitId).Count == 0
+                                          && _vendors.RecipeFor(r.BaitId) == null).ToList();
 
         ImGui.TextDisabled(orphans.Count == 0
-            ? $"All {_restock.Rows.Count} baits can be bought or crafted."
-            : $"{orphans.Count} of {_restock.Rows.Count} baits have no shop and no recipe.");
+            ? $"All {relevant.Count} baits your fish need can be bought or crafted."
+            : $"{orphans.Count} of {relevant.Count} needed baits have no shop and no recipe.");
         if (orphans.Count > 0 && ImGui.IsItemHovered())
             ImGui.SetTooltip(string.Join(Environment.NewLine, orphans.Take(20).Select(r => r.Name)));
     }
@@ -305,6 +309,18 @@ internal sealed class MainWindow : Window
                              "Going much below 50 makes the game miss steps: windows need a moment to fill.");
 
         Section("Bait list");
+        var showAll = _config.ShowAllTackle;
+        if (ImGui.Checkbox("Show all fishing tackle", ref showAll))
+        {
+            _config.ShowAllTackle = showAll;
+            _config.Save();
+            _restock.Refresh();
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Lists every bait and lure in the game, not just the ones your fish need." +
+                             Environment.NewLine +
+                             "The extra ones start at target 0 and are never bought until you set one.");
+
         var onlyEnabled = _config.OnlyEnabledLists;
         if (ImGui.Checkbox("Only lists enabled in GatherBuddy", ref onlyEnabled))
         {
@@ -564,9 +580,18 @@ internal sealed class MainWindow : Window
             ImGui.TextUnformatted(row.Name);
 
             ImGui.TableNextColumn();
-            ImGui.TextUnformatted(row.Fish.Count.ToString());
-            if (ImGui.IsItemHovered() && row.Fish.Count > 0)
-                ImGui.SetTooltip(string.Join("\n", row.Fish.Take(20).Select(Restock.ItemName)));
+            if (row.Needed)
+            {
+                ImGui.TextUnformatted(row.Fish.Count.ToString());
+                if (ImGui.IsItemHovered() && row.Fish.Count > 0)
+                    ImGui.SetTooltip(string.Join("\n", row.Fish.Take(20).Select(Restock.ItemName)));
+            }
+            else
+            {
+                ImGui.TextDisabled("-");
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip("No fish on your list needs this one.");
+            }
 
             ImGui.TableNextColumn();
             ImGui.TextUnformatted(row.Have.ToString());

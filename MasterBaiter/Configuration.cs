@@ -75,6 +75,14 @@ internal sealed class Configuration : IPluginConfiguration
     /// </summary>
     public int PacingPercent { get; set; } = 100;
 
+    /// <summary>
+    /// Alle Angelkoeder des Spiels auflisten, nicht nur die, die deine Fische
+    /// brauchen. Die zusaetzlichen stehen auf Zielmenge 0 — sonst wollte das
+    /// Plugin sofort von hundertachtundzwanzig weiteren Koedern nachkaufen,
+    /// darunter welche zu 99999 Gil das Stueck.
+    /// </summary>
+    public bool ShowAllTackle { get; set; }
+
     /// <summary>Kurze Rueckmeldung im Spielchat statt nur im Log.</summary>
     public bool ChatFeedback { get; set; } = true;
 

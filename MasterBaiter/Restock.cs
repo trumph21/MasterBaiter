@@ -16,6 +16,9 @@ internal sealed class Restock(Configuration config, BaitTable baits, GatherList 
         public List<uint> Fish = [];
         public bool Ignored;
 
+        /// <summary>Braucht ein Fisch der Liste diesen Koeder, oder ist er nur mit aufgefuehrt?</summary>
+        public bool Needed;
+
         // nur gesetzt, solange ein Haendlerfenster offen ist
         public int ShopIndex = -1;
         public uint Price;
@@ -61,12 +64,44 @@ internal sealed class Restock(Configuration config, BaitTable baits, GatherList 
                 Target = config.TargetFor(baitId),
                 Fish = fish,
                 Ignored = config.Ignored.Contains(baitId),
+                Needed = true,
             });
         }
 
-        rows.Sort((a, b) => b.Missing.CompareTo(a.Missing) != 0
-            ? b.Missing.CompareTo(a.Missing)
-            : string.Compare(a.Name, b.Name, StringComparison.CurrentCulture));
+        // Der Rest des Spiels, wenn gewuenscht. Ohne eigene Zielmenge bleiben
+        // diese Zeilen bei 0 und werden nie gekauft — sie stehen nur da, damit
+        // man ihnen eine geben kann.
+        if (config.ShowAllTackle)
+        {
+            var known = new HashSet<uint>(rows.Select(r => r.BaitId));
+            foreach (var baitId in Tackle.AllIds)
+            {
+                if (!known.Add(baitId))
+                    continue;
+
+                rows.Add(new Row
+                {
+                    BaitId = baitId,
+                    Name = ItemName(baitId),
+                    Have = CountInInventory(baitId),
+                    Target = config.Targets.GetValueOrDefault(baitId),
+                    Ignored = config.Ignored.Contains(baitId),
+                    Needed = false,
+                });
+            }
+        }
+
+        // Was fehlt zuerst, dann die gebrauchten, dann der Rest.
+        rows.Sort((a, b) =>
+        {
+            var byMissing = b.Missing.CompareTo(a.Missing);
+            if (byMissing != 0)
+                return byMissing;
+            var byNeeded = b.Needed.CompareTo(a.Needed);
+            return byNeeded != 0
+                ? byNeeded
+                : string.Compare(a.Name, b.Name, StringComparison.CurrentCulture);
+        });
 
         Rows = rows;
         Status = null;

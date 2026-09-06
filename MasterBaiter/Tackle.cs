@@ -28,7 +28,18 @@ internal static class Tackle
     private const uint LureMarker = 40000;
 
     private static readonly HashSet<uint> Lures = [];
+    private static readonly List<uint> All = [];
     private static bool _built;
+
+    /// <summary>Alle Angelkoeder des Spiels, Kunstkoeder eingeschlossen.</summary>
+    public static IReadOnlyList<uint> AllIds
+    {
+        get
+        {
+            Build();
+            return All;
+        }
+    }
 
     public static int LureCount => Lures.Count;
     public static int MarkerCount { get; private set; }
@@ -65,6 +76,8 @@ internal static class Tackle
             var byText = description.Contains("lure", StringComparison.OrdinalIgnoreCase)
                          || description.Contains("jig", StringComparison.OrdinalIgnoreCase);
 
+            All.Add(item.RowId);
+
             if (byMarker) MarkerCount++;
             if (byText) DescriptionCount++;
             if (byMarker || byText)
@@ -72,7 +85,7 @@ internal static class Tackle
         }
 
         Plugin.Log.Information(
-            $"[MasterBaiter] {Lures.Count} lures among the fishing tackle " +
+            $"[MasterBaiter] {All.Count} fishing tackle items, {Lures.Count} of them lures " +
             $"({MarkerCount} by marker, {DescriptionCount} by description).");
     }
 }

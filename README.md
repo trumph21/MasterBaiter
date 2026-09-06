@@ -10,6 +10,18 @@ the market board.
 
 ---
 
+## What is new in 0.3.4
+
+**All 188 baits and lures, if you want them.** `Show all fishing tackle` under
+Options lists everything the game has — 159 baits and 29 lures — instead of only
+the ones your current fish need.
+
+The added entries start at **target 0** and are never bought until you set a
+number. With the normal defaults the plugin would otherwise have tried to stock
+128 more baits at once, three of which cost 99,999 gil each.
+
+---
+
 ## What is new in 0.3.3
 
 **A line in chat when something finishes.** Every result used to live in
@@ -249,7 +261,7 @@ The table lists every bait your fish need:
 | Column | Meaning |
 |---|---|
 | Bait | Tick the box to skip this bait when buying |
-| Fish | How many fish on your list use it — hover for the names |
+| Fish | How many fish on your list use it — hover for the names. A dash means no fish on your list needs it |
 | Inventory | How many you carry |
 | Target | Per-bait override of the global target or lure target |
 | Missing | What would be bought |

@@ -66,7 +66,10 @@ public sealed class Plugin : IDalamudPlugin
 
         var baits = new BaitTable();
         var vendors = new VendorIndex();
-        vendors.BuildAsync(baits.AllBaitIds);
+        // Ueber alle Koeder, nicht nur die der Liste: Sonst haetten die
+        // zusaetzlichen Zeilen keine Preise und keine Haendler, sobald jemand
+        // "Show all fishing tackle" einschaltet.
+        vendors.BuildAsync(baits.AllBaitIds.Concat(Tackle.AllIds).Distinct().ToList());
         var restock = new Restock(_config, baits, new GatherList());
         _restock = restock;
         _queue = new PurchaseQueue(_config);
