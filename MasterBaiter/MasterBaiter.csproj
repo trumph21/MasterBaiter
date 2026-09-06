@@ -1,0 +1,67 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Platforms>x64</Platforms>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Version>0.3.1.0</Version>
+    <AssemblyName>MasterBaiter</AssemblyName>
+    <RootNamespace>MasterBaiter</RootNamespace>
+    <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <OutputPath>bin\</OutputPath>
+    <RestorePackages>false</RestorePackages>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+  </PropertyGroup>
+
+  <!-- Dalamud-Bibliotheken aus der lokalen XIVLauncher-Installation -->
+  <PropertyGroup Condition="'$(DALAMUD_HOME)' == ''">
+    <DALAMUD_HOME>$(APPDATA)\XIVLauncher\addon\Hooks\dev</DALAMUD_HOME>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="Dalamud">
+      <HintPath>$(DALAMUD_HOME)\Dalamud.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Dalamud.Bindings.ImGui">
+      <HintPath>$(DALAMUD_HOME)\Dalamud.Bindings.ImGui.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="FFXIVClientStructs">
+      <HintPath>$(DALAMUD_HOME)\FFXIVClientStructs.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="InteropGenerator.Runtime">
+      <HintPath>$(DALAMUD_HOME)\InteropGenerator.Runtime.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Lumina">
+      <HintPath>$(DALAMUD_HOME)\Lumina.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Lumina.Excel">
+      <HintPath>$(DALAMUD_HOME)\Lumina.Excel.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>$(DALAMUD_HOME)\Newtonsoft.Json.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- Fisch-zu-Koeder-Tabelle, erzeugt von tools/extract-baits.js -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\data\fish-baits.json" LogicalName="MasterBaiter.fish-baits.json" />
+    <EmbeddedResource Include="..\data\vendor-locations.json" LogicalName="MasterBaiter.vendor-locations.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="MasterBaiter.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
