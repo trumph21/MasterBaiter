@@ -726,6 +726,23 @@ internal sealed class MainWindow : Window
         ImGui.EndPopup();
     }
 
+    /// <summary>
+    /// Preis mittig, und beim Ueberfahren noch einmal ganz.
+    ///
+    /// "1 Purple Gatherers' Scrip" ist laenger als jede vertretbare Spalte, und
+    /// abgeschnitten steht dort "1 Purple Gath" — was nicht falsch ist, aber
+    /// auch nicht lesbar. Der Hinweistext traegt den Rest nach.
+    /// </summary>
+    private static void Priced(string text, Vector4? colour)
+    {
+        var clipped = ImGui.CalcTextSize(text).X > ImGui.GetContentRegionAvail().X;
+
+        Centered(text, colour);
+
+        if (clipped && ImGui.IsItemHovered())
+            ImGui.SetTooltip(text);
+    }
+
     /// <summary>Suchfeld ueber der Tabelle.</summary>
     private void DrawFilter()
     {
@@ -802,20 +819,20 @@ internal sealed class MainWindow : Window
         // Die Haendlerspalte waechst mit, statt fest zu bleiben: Bei
         // "13 vendors" plus Knopf reichten neunzig Punkte nicht, und der Knopf
         // wurde am rechten Rand abgeschnitten.
-        ImGui.TableSetupColumn("Bait", ImGuiTableColumnFlags.WidthStretch, 2.6f);
-        ImGui.TableSetupColumn("Fish", ImGuiTableColumnFlags.WidthFixed, 42);
+        ImGui.TableSetupColumn("Bait", ImGuiTableColumnFlags.WidthStretch, 2.2f);
+        ImGui.TableSetupColumn("Fish", ImGuiTableColumnFlags.WidthFixed, 54);
         ImGui.TableSetupColumn("Have", ImGuiTableColumnFlags.WidthFixed, 58);
         ImGui.TableSetupColumn("Target", ImGuiTableColumnFlags.WidthFixed, 62);
         ImGui.TableSetupColumn("Missing",
             ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.DefaultSort
-            | ImGuiTableColumnFlags.PreferSortDescending, 58);
+            | ImGuiTableColumnFlags.PreferSortDescending, 74);
         // Der Preis ist "5 gil" bis "1920 gil" — mitwachsend war er meist zu
         // drei Vierteln leer. Fest, und der Platz geht an den Koedernamen.
         // Preis und Haendler bleiben unsortierbar: Der Preis kommt je nach
         // Zeile aus dem offenen Laden, den Spieldaten oder dem Marktbrett und
         // ist mal Gil, mal Scrips — eine Reihenfolge daraus waere erfunden.
-        ImGui.TableSetupColumn("Price", ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.NoSort, 82);
-        ImGui.TableSetupColumn("Vendor", ImGuiTableColumnFlags.WidthStretch | ImGuiTableColumnFlags.NoSort, 1.3f);
+        ImGui.TableSetupColumn("Price", ImGuiTableColumnFlags.WidthStretch | ImGuiTableColumnFlags.NoSort, 1.5f);
+        ImGui.TableSetupColumn("Vendor", ImGuiTableColumnFlags.WidthStretch | ImGuiTableColumnFlags.NoSort, 1.2f);
         ImGui.TableSetupScrollFreeze(0, 1);
         CenteredHeadersRow(7, 1, 5);
 
@@ -906,11 +923,11 @@ internal sealed class MainWindow : Window
             // Im Waehrungsladen ist der Preis in Scrips, nicht in Gil. Dann lieber
             // den Text aus den Spieldaten, der die Waehrung benennt.
             if (row.InShop && row.Price > 0)
-                Centered(row.Currency != 0
+                Priced(row.Currency != 0
                     ? $"{row.Price} {Restock.ItemName(row.Currency)}"
-                    : $"{row.Price} gil");
+                    : $"{row.Price} gil", null);
             else if (_vendors.PriceFor(row.BaitId) is { } price)
-                Centered(price, Dim);
+                Priced(price, Dim);
             else if (_market.QuoteFor(row.BaitId) is { } quote)
             {
                 // Vom Marktbrett, nicht aus den Spieldaten: von einem Spieler

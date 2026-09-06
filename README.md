@@ -315,6 +315,23 @@ MIT — see [LICENSE](LICENSE).
 
 ## Changelog
 
+### 0.3.10
+
+Both of these came from 0.3.9 itself: the two new features took the room the
+columns used to have.
+
+**`Fish` and `Missing` were showing as `Fi...` and `Miss...`.** The sort arrow
+sits at the right of a heading and needs space that the fixed widths of 42 and
+58 did not leave.
+
+**The price column is elastic again.** It was fixed at 82 points back when the
+column held nothing longer than `77 gil`. Scrip prices changed that:
+`1 Purple Gatherers' Scrip` is longer than any width worth giving it. Where a
+price still does not fit, hovering shows it in full — clipped is not wrong, but
+it is not readable either.
+
+---
+
 ### 0.3.9
 
 **A route preview.** `Preview` next to `Run route` lists every stop with the
