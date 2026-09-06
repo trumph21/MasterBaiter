@@ -51,6 +51,15 @@ internal sealed class VendorIndex
         uint AethernetId = 0,
         VendorKind Kind = VendorKind.Other)
     {
+        /// <summary>
+        /// Der Scrip-Tausch in Idyllshire fuehrt die Koeder aller Erweiterungen
+        /// an einem Ort. Sind fuer einen Koeder nur Scrip-Haendler im Angebot,
+        /// spart dieser eine Halt die Fahrt zu mehreren Hubs.
+        /// </summary>
+        public bool PreferredScripHub
+            => Kind == VendorKind.ScripExchange
+               && Zone.Equals("Idyllshire", StringComparison.OrdinalIgnoreCase);
+
         public string KindName => Kind switch
         {
             VendorKind.GilShop => "gil",
@@ -61,7 +70,18 @@ internal sealed class VendorIndex
 
         /// <summary>Ist genug bekannt, um dorthin zu reisen?</summary>
         /// <summary>Reisen setzt Ziel und Teleportpunkt voraus.</summary>
-        public bool Navigable => Territory != 0 && World != Vector3.Zero && AetheryteId != 0;
+        /// <summary>Ist der Standort bekannt? Sagt nichts darueber, wie man hinkommt.</summary>
+        public bool HasPosition => Territory != 0 && World != Vector3.Zero;
+
+        /// <summary>
+        /// Standort UND Teleportpunkt bekannt.
+        ///
+        /// Nicht mit "erreichbar" verwechseln: Die Planeten der Cosmic
+        /// Exploration haben keinen Aetheryten und sind trotzdem anfahrbar,
+        /// naemlich ueber den Fahrzeug-NPC. Wer das hier abfragt, sperrt sie
+        /// aus. Die Frage nach der Erreichbarkeit beantwortet <see cref="Reach"/>.
+        /// </summary>
+        public bool Navigable => HasPosition && AetheryteId != 0;
 
         // Feste Kultur, sonst wird aus "6.5, 9.6" bei deutscher Einstellung
         // "6,5, 9,6" und man sieht nicht mehr, wo die eine Koordinate endet.
@@ -525,7 +545,13 @@ internal sealed class VendorIndex
                     var byKind = a.Kind.CompareTo(b.Kind);
                     if (byKind != 0)
                         return byKind;
-                    var byReach = b.Navigable.CompareTo(a.Navigable);
+
+                    // Unter den Scrip-Haendlern zuerst Idyllshire.
+                    var byHub = b.PreferredScripHub.CompareTo(a.PreferredScripHub);
+                    if (byHub != 0)
+                        return byHub;
+
+                    var byReach = b.HasPosition.CompareTo(a.HasPosition);
                     return byReach != 0 ? byReach : string.Compare(a.Npc, b.Npc, StringComparison.CurrentCulture);
                 });
                 _byBait[bait] = list;
@@ -542,7 +568,8 @@ internal sealed class VendorIndex
             $"{unlocated} NPCs without a location entry, " +
             $"{_fallback.BaitCount} baits from the shipped table, " +
             $"{_aetherytes.Count} aetherytes known, " +
-            $"{_scripCategories.Count} scrip categories with bait, " +
+            $"{result.Values.SelectMany(v => v).Count(v => v.PreferredScripHub)} entries at the " +
+            $"preferred scrip hub, {_scripCategories.Count} scrip categories with bait, " +
             $"{viaMenu} shops found behind a dialog menu, " +
             $"{MarketBoards.BuiltInCount} market boards.");
     }
@@ -596,10 +623,21 @@ internal sealed class VendorIndex
             list.Add(new AetheryteSpot(a.RowId, name, territory, position, !a.IsAetheryte, a.AethernetGroup));
         }
 
-        // Die Zuordnung steht nicht immer am Aetheryten. Manche Gebiete — etwa
-        // Sinus Ardorum — verweisen umgekehrt: TerritoryType.Aetheryte zeigt auf
-        // den Aetheryten, waehrend dessen eigenes Territory-Feld leer bleibt.
+        // Die Zuordnung steht nicht immer am Aetheryten: TerritoryType.Aetheryte
+        // zeigt umgekehrt auf einen Aetheryten. Das ist aber selten die Zusage,
+        // dass man dort ankommt — von 213 solchen Verweisen liegt der Aetheryt
+        // in 207 Faellen in einem ANDEREN Gebiet. Fuer The Firmament etwa nennt
+        // das Blatt Foundation, und ein Teleport dorthin laesst den Charakter
+        // eine Zone vor dem Ziel stehen.
+        //
+        // Uebernommen wird der Verweis deshalb nur, wenn beide Gebiete denselben
+        // Namen tragen. Das trifft die sechs Instanzvarianten — zweimal
+        // "Ul'dah - Steps of Nald", "New Gridania", "Mor Dhona", "Lakeland",
+        // "Ultima Thule" —, bei denen der Teleport tatsaechlich am Ziel landet.
+        // Alles andere gilt als nicht anfliegbar, was ehrlicher ist als ein
+        // Halt, der erst nach dem Teleport scheitert.
         var fromTerritory = 0;
+        var skippedElsewhere = 0;
         var covered = new HashSet<uint>(list.Select(s => s.Territory));
         var territories = Plugin.DataManager.GetExcelSheet<TerritoryType>();
         if (territories != null)
@@ -611,6 +649,15 @@ internal sealed class VendorIndex
                 var aetheryte = tt.Aetheryte.ValueNullable;
                 if (aetheryte is not { RowId: > 0 })
                     continue;
+
+                var here = tt.PlaceName.ValueNullable?.Name.ExtractText() ?? string.Empty;
+                var lands = territories.GetRowOrDefault(aetheryte.Value.Territory.RowId)?
+                    .PlaceName.ValueNullable?.Name.ExtractText() ?? string.Empty;
+                if (here.Length == 0 || !string.Equals(here, lands, StringComparison.OrdinalIgnoreCase))
+                {
+                    skippedElsewhere++;
+                    continue;
+                }
 
                 var name = aetheryte.Value.PlaceName.ValueNullable?.Name.ExtractText();
                 if (string.IsNullOrWhiteSpace(name))
@@ -624,7 +671,8 @@ internal sealed class VendorIndex
 
         Plugin.Log.Information(
             $"[MasterBaiter] {list.Count} teleport points, {shards} aethernet shards, " +
-            $"{withPosition} with a position, {fromTerritory} found via TerritoryType.");
+            $"{withPosition} with a position, {fromTerritory} found via TerritoryType, " +
+            $"{skippedElsewhere} skipped because the teleport lands in another zone.");
         return list;
     }
 

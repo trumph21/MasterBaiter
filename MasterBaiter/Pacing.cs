@@ -21,6 +21,12 @@ internal static class Pacing
 {
     private static readonly Random Rng = new();
 
+    /// <summary>
+    /// Streckt oder staucht alle Abstaende. 100 ist der Grundwert; wer es eilig
+    /// hat, stellt kleiner, wer es ruhiger mag, groesser.
+    /// </summary>
+    public static int Percent { get; set; } = 100;
+
     /// <summary>Wie stark ein Abstand schwankt, in Prozent des Grundwerts.</summary>
     private const int SpreadPercent = 45;
 
@@ -34,8 +40,9 @@ internal static class Pacing
     /// </summary>
     public static int Delay(int baseMs)
     {
-        var spread = Math.Max(1, baseMs * SpreadPercent / 100);
-        var value = baseMs + Rng.Next(-spread / 3, spread + 1);
+        var scaled = Math.Max(1, baseMs * Math.Clamp(Percent, 10, 400) / 100);
+        var spread = Math.Max(1, scaled * SpreadPercent / 100);
+        var value = scaled + Rng.Next(-spread / 3, spread + 1);
         return Math.Max(FloorMs, value);
     }
 
@@ -48,6 +55,6 @@ internal static class Pacing
     /// </summary>
     public static long NextWithPause(int baseMs)
         => Rng.Next(12) == 0
-            ? Environment.TickCount64 + Delay(baseMs) + Rng.Next(600, 1600)
+            ? Environment.TickCount64 + Delay(baseMs) + Delay(Rng.Next(600, 1600))
             : Next(baseMs);
 }

@@ -186,9 +186,21 @@ internal sealed class MainWindow : Window
                     _route.Start();
             }
             if (plan.Count > 0 && ImGui.IsItemHovered())
-                ImGui.SetTooltip(string.Join(Environment.NewLine,
-                    plan.Select((s, i) => $"{i + 1}. {s.Vendor.Npc} - {s.Vendor.Zone}: {string.Join(", ", s.Baits.Take(6))}"
-                                          + (s.Baits.Count > 6 ? $" (+{s.Baits.Count - 6})" : string.Empty))));
+            {
+                // Die Ladenart gehoert dazu, sonst widerspricht diese Liste der
+                // Haendlerliste in der Tabelle, ohne dass man den Grund sieht:
+                // Dort steht die guenstigere Waehrung oben, hier gewinnt, wer
+                // die meisten Koeder in einem Halt abdeckt.
+                var lines = plan.Select((s, i) =>
+                    $"{i + 1}. {s.Vendor.Npc} - {s.Vendor.Zone} [{s.Vendor.KindName}]: " +
+                    string.Join(", ", s.Baits.Take(6)) +
+                    (s.Baits.Count > 6 ? $" (+{s.Baits.Count - 6})" : string.Empty)).ToList();
+
+                lines.Add(string.Empty);
+                lines.Add("Fewest stops wins, so a vendor covering more baits beats a cheaper currency.");
+
+                ImGui.SetTooltip(string.Join(Environment.NewLine, lines));
+            }
         }
 
         if (_travel.Running && !_route.Running)
@@ -278,6 +290,20 @@ internal sealed class MainWindow : Window
         if (ImGui.IsItemHovered())
             ImGui.SetTooltip($"{Tackle.LureCount} fishing tackle items count as lures.");
 
+        ImGui.SetNextItemWidth(140);
+        var pacing = _config.PacingPercent;
+        if (ImGui.InputInt("Speed %", ref pacing, 10))
+        {
+            _config.PacingPercent = Math.Clamp(pacing, 10, 400);
+            _config.Save();
+            Pacing.Percent = _config.PacingPercent;
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("How long the plugin waits between actions, as a percentage." + Environment.NewLine +
+                             "100 is the default, 50 is twice as brisk, 200 twice as leisurely." +
+                             Environment.NewLine +
+                             "Going much below 50 makes the game miss steps: windows need a moment to fill.");
+
         Section("Bait list");
         var onlyEnabled = _config.OnlyEnabledLists;
         if (ImGui.Checkbox("Only lists enabled in GatherBuddy", ref onlyEnabled))
@@ -298,6 +324,17 @@ internal sealed class MainWindow : Window
         }
         if (ImGui.IsItemHovered())
             ImGui.SetTooltip("After travelling, start buying as soon as the shop opens.");
+
+        var useSprint = _config.UseSprint;
+        if (ImGui.Checkbox("Use Sprint", ref useSprint))
+        {
+            _config.UseSprint = useSprint;
+            _config.Save();
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Uses Sprint whenever it is off cooldown, but only while the plugin is " +
+                             "travelling." + Environment.NewLine +
+                             "Not while you are playing yourself, in combat or mounted.");
 
         var helpers = _travel.MissingHelpers();
         ImGui.TextDisabled(helpers.Count == 0
@@ -592,8 +629,8 @@ internal sealed class MainWindow : Window
                     if (ImGui.IsItemHovered())
                         ImGui.SetTooltip(string.Join(Environment.NewLine, vendors.Take(15).Select(v => $"{v} [{v.KindName}]")));
 
-                    var best = vendors.FirstOrDefault(v => v.Navigable);
-                    if (best.Navigable)
+                    var best = vendors.FirstOrDefault(Reach.CanReach);
+                    if (Reach.CanReach(best))
                     {
                         ImGui.SameLine();
                         using (ImRaiiDisabled(_travel.Running || _queue.Running || _sweep.Running || _market.Running || !_travel.Available))

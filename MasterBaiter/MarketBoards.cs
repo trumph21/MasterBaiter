@@ -135,7 +135,10 @@ internal static class MarketBoards
 
         foreach (var board in All(config, vendors))
         {
-            if (!board.Navigable || !Teleportable.Check(board.AetheryteId, out _))
+            // Ueber Reach, nicht ueber den Teleportpunkt allein: Ein Brett im
+            // Gebiet, in dem man gerade steht, ist erreichbar, auch wenn dorthin
+            // kein Teleport fuehrt.
+            if (!Reach.CanReach(board))
                 continue;
 
             var distance = vendors.DistanceToAetheryte(board);

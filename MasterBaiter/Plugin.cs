@@ -17,6 +17,7 @@ public sealed class Plugin : IDalamudPlugin
     internal static IClientState ClientState => Services.ClientState;
     internal static IObjectTable ObjectTable => Services.ObjectTable;
     internal static Dalamud.Plugin.Services.ITargetManager TargetManager => Services.TargetManager;
+    internal static Dalamud.Plugin.Services.ICondition Condition => Services.Condition;
 
     private const string Command = "/masterbaiter";
     private const string CommandShort = "/mbait";
@@ -58,6 +59,8 @@ public sealed class Plugin : IDalamudPlugin
 
         _config = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
 
+        Pacing.Percent = _config.PacingPercent;
+
         // Frueh einstufen, damit die Zielmengen ab der ersten Tabelle stimmen.
         Tackle.Build();
 
@@ -71,12 +74,20 @@ public sealed class Plugin : IDalamudPlugin
         _market = new MarketBoard(_config, restock);
         _travel = new Travel();
         _cosmic = new CosmicTravel(_config, _travel, vendors);
-        _route = new Route(_config, restock, vendors, _travel, _queue, _sweep, _market);
+        _route = new Route(_config, restock, vendors, _travel, _queue, _sweep, _market, _cosmic);
 
         // Waehrend einer Route steuert die Route den Kauf, nicht dieser Haken.
         _travel.Arrived += () =>
         {
             if (!_config.BuyOnArrival || _route.Running)
+                return;
+
+            // Waehrend einer Cosmic-Fahrt ist das angesprochene Ziel der
+            // Fahrzeug-NPC, kein Haendler. Ohne diese Ausnahme laeuft die Frist
+            // mitten in der Fahrt ab und meldet einen Fehlschlag, den es nicht
+            // gibt. Nach der Ankunft startet die Fahrt selbst die Reise zum
+            // Haendler, und dann greift der Vormerker richtig.
+            if (_cosmic.Running)
                 return;
 
             // Nicht sofort kaufen, sondern vormerken: siehe ShopFillTimeoutMs.
@@ -100,7 +111,10 @@ public sealed class Plugin : IDalamudPlugin
 
                 foreach (var vendor in vendors.For(row.BaitId))
                 {
-                    if (vendor.Territory != here || !vendor.Navigable)
+                    // Nach Standort fragen, nicht nach dem Teleportpunkt: Auf
+                    // den Planeten gibt es keinen, und gebraucht wird er hier
+                    // auch nicht — wir stehen bereits im Gebiet.
+                    if (vendor.Territory != here || !vendor.HasPosition)
                         continue;
 
                     Log.Information($"[MasterBaiter] Walking to {vendor.Npc} for {row.Name}.");
@@ -142,6 +156,7 @@ public sealed class Plugin : IDalamudPlugin
         StartPendingPurchase();
         CheckHelpers();
         _cosmic.Tick();
+        Sprint.Tick(_config, _travel, _route, _cosmic);
         Teleportable.Tick();
         MarketBoards.Learn(_config);
         _queue.Tick();
@@ -169,8 +184,11 @@ public sealed class Plugin : IDalamudPlugin
 
         var now = Environment.TickCount64;
 
-        // Das Fenster muss nicht nur offen sein, sondern auch Posten fuehren.
-        if (ShopWindowReader.IsOpen && ShopWindowReader.ReadEntries().Count > 0)
+        // Das Fenster muss nicht nur offen sein, sondern auch Posten fuehren —
+        // ausser beim Scrip-Tausch, der auf einem leeren Reiter oeffnen kann und
+        // sich selbst durchblaettert.
+        if (ShopWindowReader.IsOpen
+            && (ShopWindowReader.Kind == "scrip exchange" || ShopWindowReader.ReadEntries().Count > 0))
         {
             _buyPending = false;
             _restock.Refresh();
@@ -185,7 +203,9 @@ public sealed class Plugin : IDalamudPlugin
             return;
 
         _buyPending = false;
-        Log.Warning($"[MasterBaiter] The {ShopWindowReader.Kind} never listed anything; nothing was bought.");
+        Log.Warning(ShopWindowReader.Kind == "none"
+            ? "[MasterBaiter] No shop window opened, so nothing was bought."
+            : $"[MasterBaiter] The {ShopWindowReader.Kind} never listed anything; nothing was bought.");
     }
 
     /// <summary>

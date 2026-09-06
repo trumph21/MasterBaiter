@@ -10,6 +10,33 @@ the market board.
 
 ---
 
+## What is new in 0.3.2
+
+**Routes reach the Cosmic Exploration planets.** `Go` already got there, but the
+route planner asked a different question about reachability and quietly left
+those vendors out. All three places — the button, the planner and the self-check
+— now ask the same one.
+
+**Several stalls are gone.** A scrip exchange that opened on an empty tab was
+skipped; an open shop window made Lifestream refuse the next teleport; an
+aethernet hop fired before the teleport had landed; and a market board search
+that went unanswered left the route waiting forever. Each of those now retries
+or moves on, and says so.
+
+**207 bogus teleport points removed.** The game data names a nearby city
+aetheryte for many zones that have none of their own. That is not the same as
+being able to get there: teleporting to Foundation leaves you a zone away from
+The Firmament, which is now reported as unreachable instead of failing after the
+teleport.
+
+**Idyllshire first among scrip exchanges.** It carries the bait of every
+expansion, so one stop replaces several.
+
+**New settings.** `Speed %` sets how briskly the plugin acts — 100 is the
+default, 50 twice as fast. `Use Sprint` uses Sprint while travelling.
+
+---
+
 ## What is new in 0.3.1
 
 **`Export log to desktop`** under Options → Diagnostics, so a problem can be
@@ -230,6 +257,12 @@ Topwater Frog: skipped. Cheapest listing is 3999 gil each, but no stack of 4
 
 **`Go`** next to a vendor teleports there and walks to the NPC. With
 `buy on arrival` ticked it also opens the shop and buys.
+
+Where a bait has several vendors, `Go` follows the currency order — gil, then
+Cosmic Exploration, then scrips — while `Run route` picks whoever covers the
+most baits in one stop. The two lists are therefore sorted differently on
+purpose; the route tooltip names each stop's shop type so the difference is
+visible.
 
 **Cosmic Exploration** has no aetheryte, so `Go` on a bait sold there rides
 instead of teleporting: to Bestways Burrow, over to Drivingway the Moon Rover,

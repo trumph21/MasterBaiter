@@ -69,6 +69,15 @@ internal sealed class Configuration : IPluginConfiguration
     /// </summary>
     public Spot? CosmicGate { get; set; }
 
+    /// <summary>
+    /// Tempo aller automatischen Handlungen in Prozent. 100 ist der Grundwert,
+    /// kleinere Zahlen sind schneller.
+    /// </summary>
+    public int PacingPercent { get; set; } = 100;
+
+    /// <summary>Sprint einsetzen, solange das Plugin den Charakter bewegt.</summary>
+    public bool UseSprint { get; set; }
+
     /// <summary>Zielplanet der Cosmic Exploration.</summary>
     public string CosmicPlanet { get; set; } = "Auxesia";
 

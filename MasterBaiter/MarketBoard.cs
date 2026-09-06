@@ -30,8 +30,17 @@ internal sealed unsafe class MarketBoard(Configuration config, Restock restock)
 {
     private const int DelayMs = 450;
     private const int ResultTimeoutMs = 8000;
-    private const int SearchTimeoutMs = 6000;
-    private const int ListingSettleMs = 1500;
+    // Beantwortete Abfragen kommen in rund zwei Sekunden zurueck. Fuenf sind
+    // reichlich; acht waren verschenkte Zeit bei jedem Koeder, der nie antwortet.
+    private const int SearchTimeoutMs = 5000;
+
+    /// <summary>
+    /// So oft wird eine Suche wiederholt. Zwei Abfragen kurz hintereinander
+    /// bleiben gelegentlich ohne Antwort — das Marktbrett scheint sie zu
+    /// drosseln. Ein zweiter Anlauf nach ein paar Sekunden hilft dann.
+    /// </summary>
+    private const int SearchTries = 2;
+    private const int ListingSettleMs = 1000;
     private const uint GilItemId = 1;
 
     private static readonly string[] AddonNames = ["ItemSearch", "ItemSearchResult"];
@@ -45,9 +54,9 @@ internal sealed unsafe class MarketBoard(Configuration config, Restock restock)
     private long _resultDeadline;
     private bool _awaitingResult;
     private int _countBefore;
-    private uint _waitingFor;
     private uint _requestedFor;
     private long _requestDeadline;
+    private int _searchTries;
     private long _settledAt;
 
     public bool Running { get; private set; }
@@ -85,7 +94,6 @@ internal sealed unsafe class MarketBoard(Configuration config, Restock restock)
         Spent = 0;
         Bought = 0;
         _awaitingResult = false;
-        _waitingFor = 0;
         _requestedFor = 0;
         _settledAt = 0;
 
@@ -153,7 +161,6 @@ internal sealed unsafe class MarketBoard(Configuration config, Restock restock)
         if (have >= target)
         {
             _queue.RemoveAt(0);
-            _waitingFor = 0;
             _requestedFor = 0;
             _settledAt = 0;
             return;
@@ -185,13 +192,8 @@ internal sealed unsafe class MarketBoard(Configuration config, Restock restock)
             if (_requestedFor != baitId)
             {
                 _requestedFor = baitId;
-                _requestDeadline = now + SearchTimeoutMs;
-                proxy->SearchItemId = baitId;
-                var accepted = proxy->RequestData();
-                Plugin.Log.Information(
-                    $"[MasterBaiter] Asked the market board for {Restock.ItemName(baitId)} " +
-                    $"(request {(accepted ? "accepted" : "refused")}).");
-                _nextAt = Pacing.NextWithPause(DelayMs);
+                _searchTries = 0;
+                Ask(proxy, baitId, now);
                 return;
             }
 
@@ -201,21 +203,27 @@ internal sealed unsafe class MarketBoard(Configuration config, Restock restock)
                 return;
             }
 
-            // Frist abgelaufen. Der Spieler sucht selbst; sobald Angebote da
-            // sind, laeuft der Kauf weiter. Die Zahlen stehen dabei, sonst
-            // laesst sich spaeter nicht sagen, woran es lag.
-            if (_waitingFor != baitId)
+            // Zwei Abfragen kurz hintereinander bleiben gelegentlich ohne
+            // Antwort. Ein weiterer Anlauf kostet Sekunden, ein Fehlschlag den
+            // ganzen Koeder.
+            if (_searchTries < SearchTries)
             {
-                _waitingFor = baitId;
-                Status = $"Search for {Restock.ItemName(baitId)} — waiting.";
                 Plugin.Log.Information(
-                    $"[MasterBaiter] No listings for {Restock.ItemName(baitId)} yet " +
-                    $"(pending={proxy->WaitingForListings}, count={proxy->ListingCount}, " +
-                    $"first={(count > 0 ? listings[0].ItemId : 0)}). " +
-                    "Search for it yourself and the purchase will follow.");
+                    $"[MasterBaiter] No answer for {Restock.ItemName(baitId)} " +
+                    $"(pending={proxy->WaitingForListings}, count={proxy->ListingCount}). Asking again.");
+                Ask(proxy, baitId, now);
+                return;
             }
 
-            _nextAt = Pacing.NextWithPause(DelayMs);
+            // Auch nach mehreren Anlaeufen nichts. Frueher wartete der Lauf ab
+            // hier unbegrenzt darauf, dass der Spieler selbst sucht — eine Route
+            // blieb damit stehen, ohne es zu sagen. Ein uebersprungener Koeder
+            // ist besser als ein Halt, der nie endet.
+            Plugin.Log.Warning(
+                $"[MasterBaiter] {Restock.ItemName(baitId)}: the market board never answered, skipped " +
+                $"(pending={proxy->WaitingForListings}, count={proxy->ListingCount}).");
+            _queue.RemoveAt(0);
+            _requestedFor = 0;
             _settledAt = 0;
             return;
         }
@@ -268,7 +276,6 @@ internal sealed unsafe class MarketBoard(Configuration config, Restock restock)
 
             Plugin.Log.Warning($"[MasterBaiter] {Restock.ItemName(baitId)}: skipped. {reason}");
             _queue.RemoveAt(0);
-            _waitingFor = 0;
             _requestedFor = 0;
             _settledAt = 0;
             return;
@@ -290,6 +297,22 @@ internal sealed unsafe class MarketBoard(Configuration config, Restock restock)
         Status = $"{Restock.ItemName(baitId)}: {quantity} for {cost} gil";
         Plugin.Log.Information($"[MasterBaiter] Buying {quantity}x {Restock.ItemName(baitId)} " +
                                $"at {unitPrice} gil each ({cost} gil).");
+    }
+
+    /// <summary>Stoesst die spieleigene Abfrage an und zaehlt den Versuch.</summary>
+    private void Ask(InfoProxyItemSearch* proxy, uint baitId, long now)
+    {
+        _searchTries++;
+        _requestDeadline = now + SearchTimeoutMs;
+        proxy->SearchItemId = baitId;
+        var accepted = proxy->RequestData();
+        Plugin.Log.Information(
+            $"[MasterBaiter] Asked the market board for {Restock.ItemName(baitId)}, " +
+            $"try {_searchTries} of {SearchTries} (request {(accepted ? "accepted" : "refused")}).");
+
+        // Etwas mehr Luft als sonst: Zu dichte Abfragen sind vermutlich der
+        // Grund, warum manche unbeantwortet bleiben.
+        _nextAt = Pacing.Next(DelayMs * 3);
     }
 
     private void WaitForResult(uint baitId, int target, int have, long now)
@@ -315,7 +338,6 @@ internal sealed unsafe class MarketBoard(Configuration config, Restock restock)
         _awaitingResult = false;
         Plugin.Log.Warning($"[MasterBaiter] {Restock.ItemName(baitId)}: the purchase was not registered, skipped.");
         _queue.RemoveAt(0);
-        _waitingFor = 0;
         _requestedFor = 0;
         _settledAt = 0;
     }

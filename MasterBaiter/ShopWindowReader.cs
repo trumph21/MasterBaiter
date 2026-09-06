@@ -201,6 +201,23 @@ internal static unsafe class ShopWindowReader
                                    $"{(e.CurrencyId != 0 ? Restock.ItemName(e.CurrencyId) : "gil"),-28}  {Restock.ItemName(e.ItemId)}");
     }
 
+    /// <summary>
+    /// Schliesst das Haendlerfenster.
+    ///
+    /// Noetig vor der Weiterreise: Solange es offen steht, lehnt Lifestream
+    /// den Teleport ab, und der naechste Halt scheitert mit "refused" statt zu
+    /// starten.
+    /// </summary>
+    public static bool Close()
+    {
+        var addon = GetShopAddon();
+        if (addon == null)
+            return false;
+
+        addon->Close(true);
+        return true;
+    }
+
     /// <summary>Loest den Kauf von <paramref name="amount"/> Stueck des Eintrags aus.</summary>
     public static bool Buy(int index, int amount)
     {

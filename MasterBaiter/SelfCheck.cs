@@ -29,6 +29,7 @@ internal static class SelfCheck
         var noSource = new List<string>();           // gar nichts
         var zonesWithoutTeleport = new SortedSet<string>();
         var zonesNotAttuned = new SortedSet<string>();
+        var zonesViaCosmic = new SortedSet<string>();
         var zonesApproximate = new SortedSet<string>();
 
         foreach (var row in rows)
@@ -38,17 +39,22 @@ internal static class SelfCheck
 
             foreach (var v in list)
             {
-                if (v.Navigable && !Teleportable.Check(v.AetheryteId, out _))
-                    zonesNotAttuned.Add($"{v.Zone} (via {v.AetheryteName})");
-                else if (v.Navigable)
+                if (Reach.CanReach(v))
+                {
                     navigable++;
-                else if (v.Territory != 0 && v.AetheryteId == 0)
-                    zonesWithoutTeleport.Add(v.Zone.Length > 0 ? v.Zone : $"territory {v.Territory}");
+                    if (Reach.IsCosmic(v))
+                        zonesViaCosmic.Add(v.Zone);
+                    if (v.ApproximateHeight)
+                        zonesApproximate.Add(v.Zone);
+                    continue;
+                }
+
+                if (v.Navigable)
+                    zonesNotAttuned.Add($"{v.Zone} (via {v.AetheryteName})");
                 else if (v.Territory == 0)
                     zonesWithoutTeleport.Add($"{v.Zone} (zone not resolved)");
-
-                if (v.Navigable && v.ApproximateHeight)
-                    zonesApproximate.Add(v.Zone);
+                else
+                    zonesWithoutTeleport.Add(v.Zone.Length > 0 ? v.Zone : $"territory {v.Territory}");
             }
 
             if (navigable > 0)
@@ -88,6 +94,9 @@ internal static class SelfCheck
         Detail("NO SOURCE", noSource);
         Detail("craftable", craftedOnly);
         Detail("special shop", specialOnly);
+
+        if (zonesViaCosmic.Count > 0)
+            report.AppendLine($"  reached by cosmic exploration: {string.Join(", ", zonesViaCosmic)}");
 
         if (zonesWithoutTeleport.Count > 0)
             report.AppendLine($"  ZONES WITHOUT A TELEPORT POINT: {string.Join(", ", zonesWithoutTeleport)}");

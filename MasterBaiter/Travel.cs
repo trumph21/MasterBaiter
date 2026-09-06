@@ -102,6 +102,18 @@ internal sealed class Travel
     /// </summary>
     private Func<bool>? _doneWhen;
 
+    /// <summary>Bisherige Versuche, den Aethernet-Sprung auszuloesen.</summary>
+    private int _aethernetTries;
+
+    /// <summary>Wann der naechste Versuch fruehestens ansteht.</summary>
+    private long _aethernetNextTry;
+
+    /// <summary>Abstand zwischen zwei Versuchen.</summary>
+    private const int AethernetRetryMs = 2500;
+
+    /// <summary>So oft wird es versucht, bevor der Halt scheitert.</summary>
+    private const int AethernetMaxTries = 8;
+
     /// <summary>
     /// Wie <see cref="Start(VendorIndex.Vendor)"/>, aber mit eigener
     /// Erfolgsbedingung. Sie wird nach dem Start gesetzt, weil Start sie
@@ -116,7 +128,9 @@ internal sealed class Travel
 
     public void Start(VendorIndex.Vendor vendor)
     {
-        if (!vendor.Navigable)
+        // Der Teleportpunkt wird erst geprueft, wenn ein Teleport ansteht —
+        // innerhalb des Gebiets und auf den Planeten braucht es keinen.
+        if (!vendor.HasPosition)
         {
             Fail("Vendor has no usable coordinates.");
             return;
@@ -126,6 +140,8 @@ internal sealed class Travel
         _approachRetries = 0;
         _zoneSettledAt = 0;
         _doneWhen = null;
+        _aethernetTries = 0;
+        _aethernetNextTry = 0;
 
         if (Plugin.ClientState.TerritoryType == vendor.Territory)
         {
@@ -237,19 +253,49 @@ internal sealed class Travel
                 if (Plugin.ClientState.TerritoryType == 0)
                     return;
 
+                // Lifestream nimmt den Sprung nur an, wenn der Charakter im
+                // Aethernet-Netz steht. Direkt nach dem Ausloesen des Teleports
+                // ist er das noch nicht — er steht bis zum Ladebildschirm im
+                // Ausgangsgebiet, und von dort wird abgelehnt.
+                //
+                // Auf einen Gebietswechsel zu warten waere falsch: Steht man
+                // bereits in der Stadt, findet keiner statt. Deshalb wird es
+                // schlicht wiederholt, bis es angenommen wird.
+                if (Environment.TickCount64 < _aethernetNextTry)
+                    return;
+
+                if (_aethernetTries >= AethernetMaxTries)
+                {
+                    Fail($"Lifestream would not take the aethernet hop to {_target.Zone} " +
+                         $"(id {_target.AethernetId}) after {_aethernetTries} tries.");
+                    return;
+                }
+
+                _aethernetTries++;
+                _aethernetNextTry = Environment.TickCount64 + AethernetRetryMs;
+
+                var accepted = false;
                 try
                 {
-                    if (!_lsAethernet.InvokeFunc(_target.AethernetId))
-                    {
-                        Fail("Lifestream refused the aethernet hop.");
-                        return;
-                    }
+                    accepted = _lsAethernet.InvokeFunc(_target.AethernetId);
                 }
                 catch (Exception ex)
                 {
                     Fail($"Aethernet hop not available: {ex.Message}");
                     return;
                 }
+
+                Plugin.Log.Information(
+                    $"[MasterBaiter] Aethernet hop to {_target.Zone} via id {_target.AethernetId}, " +
+                    $"from territory {Plugin.ClientState.TerritoryType}, try {_aethernetTries}: " +
+                    $"{(accepted ? "accepted" : "refused")}.");
+
+                // Der Rueckgabewert sagt nichts: Lifestream meldet "true" und
+                // scheitert danach intern mit "Destination could not be found",
+                // wenn der Charakter noch nicht im Aethernet-Netz steht. Ob der
+                // Sprung wirklich gelungen ist, zeigt allein der Gebietswechsel
+                // — darauf wartet der naechste Schritt.
+                _ = accepted;
 
                 Status = "Taking the aethernet.";
                 _step = Step.WaitingForDistrict;
@@ -258,7 +304,16 @@ internal sealed class Travel
 
             case Step.WaitingForDistrict:
                 if (Plugin.ClientState.TerritoryType != _target.Territory)
+                {
+                    // Nichts passiert? Dann war der Sprung zu frueh. Zurueck in
+                    // den vorigen Schritt, der ihn erneut ausloest — inzwischen
+                    // duerfte der Teleport angekommen sein.
+                    if (Environment.TickCount64 >= _aethernetNextTry
+                        && _aethernetTries < AethernetMaxTries)
+                        _step = Step.WaitingForZone;
+
                     return;
+                }
                 Status = $"Walking to {_target.Npc}.";
                 _step = Step.Pathfinding;
                 _deadline = Environment.TickCount64 + WalkTimeoutMs;

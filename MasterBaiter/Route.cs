@@ -12,7 +12,7 @@ namespace MasterBaiter;
 /// einen Teleport.
 /// </summary>
 internal sealed class Route(Configuration config, Restock restock, VendorIndex vendors, Travel travel,
-    PurchaseQueue queue, ScripSweep sweep, MarketBoard market)
+    PurchaseQueue queue, ScripSweep sweep, MarketBoard market, CosmicTravel cosmic)
 {
     public sealed record RouteStop(VendorIndex.Vendor Vendor, List<string> Baits, bool IsMarketBoard = false);
 
@@ -23,6 +23,15 @@ internal sealed class Route(Configuration config, Restock restock, VendorIndex v
     private int _index = -1;
     private long _nextStopAt;
     private long _shopWaitUntil;
+
+    /// <summary>
+    /// Wie lange ein Zustand dauern darf, bevor die Route ihn als haengend
+    /// meldet. Ein Halt, der stillschweigend stehen bleibt, ist schlimmer als
+    /// einer, der abbricht: Man wartet, ohne es zu wissen.
+    /// </summary>
+    private const int StateTimeoutMs = 120000;
+
+    private long _stateSince;
 
     public bool Running => _state != State.Idle;
     public string Status { get; private set; } = string.Empty;
@@ -47,9 +56,9 @@ internal sealed class Route(Configuration config, Restock restock, VendorIndex v
             foreach (var (baitId, name) in open)
             foreach (var vendor in vendors.For(baitId))
             {
-                if (!vendor.Navigable)
-                    continue;
-                if (!Teleportable.Check(vendor.AetheryteId, out _))
+                // Nicht nur Teleportziele: Die Planeten der Cosmic
+                // Exploration sind ueber den Fahrzeug-NPC erreichbar.
+                if (!Reach.CanReach(vendor))
                     continue;
                 if (!byVendor.TryGetValue(vendor, out var list))
                     byVendor[vendor] = list = [];
@@ -62,6 +71,7 @@ internal sealed class Route(Configuration config, Restock restock, VendorIndex v
             var best = byVendor
                 .OrderByDescending(e => e.Value.Count)
                 .ThenBy(e => e.Key.Kind)                       // Gil vor Cosmic vor Scrip
+                .ThenByDescending(e => e.Key.PreferredScripHub) // unter Scrips: Idyllshire
                 .ThenByDescending(e => e.Key.Territory == currentZone)
                 .ThenBy(e => e.Key.ApproximateHeight)
                 .First();
@@ -93,14 +103,14 @@ internal sealed class Route(Configuration config, Restock restock, VendorIndex v
         if (_stops.Count == 0)
         {
             Status = "Nothing to buy, or no reachable vendor.";
-            _state = State.Idle;
+            Enter(State.Idle);
             return;
         }
 
         Plugin.Log.Information($"[MasterBaiter] Route with {_stops.Count} stops: " +
                                string.Join(" -> ", _stops.Select(s => $"{s.Vendor.Npc} ({s.Baits.Count})")));
         _index = -1;
-        _state = State.Starting;
+        Enter(State.Starting);
         Advance();
     }
 
@@ -108,13 +118,15 @@ internal sealed class Route(Configuration config, Restock restock, VendorIndex v
     {
         if (travel.Running)
             travel.Stop(reason);
+        if (cosmic.Running)
+            cosmic.Stop(reason);
         if (sweep.Running)
             sweep.Stop(reason);
         if (market.Running)
             market.Stop(reason);
         if (queue.Running)
             queue.Stop(reason);
-        _state = State.Idle;
+        Enter(State.Idle);
         _stops.Clear();
         _index = -1;
         Status = reason;
@@ -127,22 +139,51 @@ internal sealed class Route(Configuration config, Restock restock, VendorIndex v
         {
             Status = $"Route finished, {_stops.Count} stops.";
             Plugin.Log.Information($"[MasterBaiter] {Status}");
-            _state = State.Idle;
+            Enter(State.Idle);
             return;
         }
+
+        // Ein offenes Ladenfenster verhindert den naechsten Teleport. Es zu
+        // schliessen genuegt aber nicht — geschieht das im selben Frame wie der
+        // Teleport, lehnt Lifestream noch ab. Deshalb wird der Halt hier nur
+        // vorgemerkt und erst nach der Pause gestartet.
+        if (ShopWindowReader.IsOpen)
+            ShopWindowReader.Close();
 
         _nextStopAt = Pacing.Next(1100);
         _shopWaitUntil = 0;
         var stop = _stops[_index];
         Status = $"Stop {_index + 1}/{_stops.Count}: {stop.Vendor.Npc} in {stop.Vendor.Zone}";
-        travel.Start(stop.Vendor);
-        // Am Marktbrett oeffnet sich kein Ladenfenster, deshalb ein eigener
-        // Zustand — sonst gilt der Halt als gescheitert, obwohl er geklappt hat.
-        _state = stop.IsMarketBoard ? State.AtMarketBoard : State.Travelling;
+        Plugin.Log.Information($"[MasterBaiter] {Status}");
+        Enter(State.Starting);
+    }
+
+    /// <summary>Wechselt den Zustand und haelt fest, seit wann er gilt.</summary>
+    private void Enter(State next)
+    {
+        if (_state != next)
+            Plugin.Log.Debug($"[MasterBaiter] Route: {_state} -> {next}");
+        _state = next;
+        _stateSince = Environment.TickCount64;
     }
 
     public void Tick()
     {
+        // Notbremse: Bleibt ein Zustand haengen, sagt die Route es, statt
+        // stumm stehen zu bleiben. Der Kaufzustand ist ausgenommen, solange
+        // tatsaechlich gekauft wird — ein Scrip-Durchlauf dauert seine Zeit.
+        if (_state != State.Idle && _stateSince != 0
+            && Environment.TickCount64 - _stateSince > StateTimeoutMs
+            && !queue.Running && !sweep.Running && !market.Running
+            && !travel.Running && !cosmic.Running)
+        {
+            Plugin.Log.Warning(
+                $"[MasterBaiter] Route stuck in {_state} at stop {_index + 1}/{_stops.Count} " +
+                $"for {(Environment.TickCount64 - _stateSince) / 1000}s. Moving on.");
+            Advance();
+            return;
+        }
+
         // Ein gescheiterter Halt darf nicht im selben Frame zum naechsten
         // fuehren, sonst rauscht eine ganze Route in einer Millisekunde durch
         // und im Log steht nur "fertig".
@@ -151,8 +192,27 @@ internal sealed class Route(Configuration config, Restock restock, VendorIndex v
 
         switch (_state)
         {
+            case State.Starting:
+            {
+                var stop = _stops[_index];
+
+                // Zu den Planeten fuehrt kein Teleport, sondern der Fahrzeug-NPC.
+                if (Reach.IsCosmic(stop.Vendor))
+                    cosmic.StartTo(stop.Vendor);
+                else
+                    travel.Start(stop.Vendor);
+
+                // Am Marktbrett oeffnet sich kein Ladenfenster, deshalb ein
+                // eigener Zustand — sonst gilt der Halt als gescheitert, obwohl
+                // er geklappt hat.
+                Enter(stop.IsMarketBoard ? State.AtMarketBoard : State.Travelling);
+                return;
+            }
+
             case State.Travelling:
-                if (travel.Running)
+                // Eine Cosmic-Fahrt endet damit, dass sie selbst eine normale
+                // Reise zum Haendler startet; beide muessen still sein.
+                if (travel.Running || cosmic.Running)
                     return;
 
                 if (!ShopWindowReader.IsOpen)
@@ -167,7 +227,13 @@ internal sealed class Route(Configuration config, Restock restock, VendorIndex v
 
                 // Erst kaufen, wenn der Laden seine Posten zeigt. Direkt nach
                 // dem Oeffnen ist das Fenster noch leer.
-                if (ShopWindowReader.ReadEntries().Count == 0)
+                //
+                // Ausgenommen der Scrip-Tausch: Der oeffnet auf irgendeinem
+                // Reiter, und der kann leer sein — beim letzten Lauf war es
+                // "Music/Furnishings/Misc.". Dort auf Eintraege zu warten heisst
+                // auf nichts zu warten; der Durchlauf blaettert ja selbst.
+                if (ShopWindowReader.Kind != "scrip exchange"
+                    && ShopWindowReader.ReadEntries().Count == 0)
                 {
                     if (Environment.TickCount64 < _shopWaitUntil)
                         return;
@@ -183,11 +249,11 @@ internal sealed class Route(Configuration config, Restock restock, VendorIndex v
                     sweep.Start();
                 else
                     queue.Start(restock.Rows);
-                _state = State.Buying;
+                Enter(State.Buying);
                 break;
 
             case State.AtMarketBoard:
-                if (travel.Running)
+                if (travel.Running || cosmic.Running)
                     return;
 
                 if (!MarketBoard.IsOpen)
@@ -199,7 +265,7 @@ internal sealed class Route(Configuration config, Restock restock, VendorIndex v
 
                 restock.Refresh();
                 market.Start(restock.Rows, vendors);
-                _state = State.Buying;
+                Enter(State.Buying);
                 break;
 
             case State.Buying:
