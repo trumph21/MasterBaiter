@@ -10,191 +10,76 @@ the market board.
 
 ---
 
-## What is new in 0.3.7
+## Installation
 
-**`/mbait` appears in `/xlhelp`.** The short form has always worked, but it was
-registered as hidden, so the only way to learn it was to read the installer
-description. A command nobody can find is not a command.
+There are two ways. The first is the one you want: it updates itself.
 
----
+### Through the plugin repository
 
-## What is new in 0.3.6
+MasterBaiter is not in Dalamud's official list, so Dalamud has to be told where
+to look. That is a one-time step, and afterwards the plugin behaves like any
+other — it shows up in the installer, and new versions arrive on their own.
 
-A pass over the window. Nothing about what the plugin does changed.
+1. **Open Dalamud's settings.** Type this in the game chat:
 
-**The Go buttons stand in one column.** They used to sit directly behind the
-vendor text, and that text is sometimes `market` and sometimes `17 vendors`, so
-every button was somewhere else and the eye had to find it again in each row. In
-the widest case the button was pushed past the edge of a fixed 90-point column
-and could not be clicked at all.
+   ```
+   /xlsettings
+   ```
 
-**Numbers are centred, with their headings above them.** `Have` and `Missing`
-were right-aligned, the target was left-aligned inside a box, and every heading
-sat at the left edge regardless. The vertical grid lines are gone as well: a row
-is read across, and the lines cut it into pieces.
+2. **Go to the "Experimental" tab** and find **Custom Plugin Repositories**.
 
-**The target is a number now.** Twenty framed input boxes stacked down the
-column were the loudest thing in the table. Click the number and the field
-appears, focused and selected, so you can just type.
+3. **Paste this address** into the empty field and press the **+** button next
+   to it:
 
-**Honey yellow.** One accent colour, on the missing amount, the active tab,
-check marks and sliders. Resting surfaces stay near-neutral, because a saturated
-yellow that is darkened is brown, and brown buttons were not the intent. Options
-has a switch to turn it off, since it overrides your Dalamud style for this one
-window.
+   ```
+   https://raw.githubusercontent.com/trumph21/MasterBaiter/main/repo.json
+   ```
 
-**The title bar names the version**, read from the assembly rather than kept by
-hand in a second place.
+4. **Press "Save and Close"** at the bottom. Dalamud fetches the list right
+   away; nothing else is needed.
 
----
+5. **Open the plugin installer** — `/xlplugins` — search for
+   **MasterBaiter**, and press **Install**.
 
-## What is new in 0.3.5
+Updates from then on are the ordinary ones: Dalamud offers them in the
+installer, or installs them by itself if you have that switched on.
 
-**Shorter walks, everywhere.** Only 28 of 452 aetherytes had a position the
-plugin could read, because it looked at the wrong side of the link — a location
-row points at an aetheryte, not the other way round. "The nearest aetheryte" was
-therefore mostly whichever came first in the sheet. In Limsa that meant walking
-149 units to a market board with two others sitting 40 away. Now 101 have a
-position, and the walk there takes eight seconds instead of twenty-three.
+To undo all of it, remove the line again in the same settings tab.
 
-**Buying checks the currency first.** Without enough scrips a purchase used to
-be attempted, wait five seconds for a confirmation that never came, and repeat —
-three times per bait. Fifteen baits made that minutes of nothing. The price and
-the currency are in the shop window, so the question can be answered before it
-is asked. Partial funds now buy what they cover instead of nothing.
+### By hand, from a release
 
-**A refused teleport no longer loses the stop.** Lifestream sometimes declines
-for a moment; it is now retried for up to 25 seconds. One refusal used to cost a
-vendor carrying nineteen baits.
+Use this if you would rather not add a repository, or you are working on the
+plugin yourself. Installed this way, **the plugin does not update itself.**
 
-**"Nothing listed" is said plainly.** A bait with no offers on the market board
-looks exactly like an unanswered query from the outside, so the message names
-both possibilities rather than claiming a cause, and the table shows
-`none listed`.
+1. **Download** `MasterBaiter.zip` from the
+   [releases page](https://github.com/trumph21/MasterBaiter/releases) and unpack
+   it into a folder somewhere permanent. The folder must be **named exactly
+   MasterBaiter** — Dalamud rejects the path otherwise, and moving it later
+   breaks the link:
 
-**Two buttons removed.** `Buy missing` and `Buy on market board` are gone;
-buying happens where the plugin travelled to, through `Run route` or `Go`. The
-per-row `Buy` button at an open shop stays.
+   ```
+   C:\Plugins\MasterBaiter\
+   ```
 
----
+2. **Register the path.** In game:
 
-## What is new in 0.3.4
+   ```
+   /xlsettings  ->  tab "Experimental"  ->  "Dev Plugin Locations"
+   ```
 
-**All 188 baits and lures, if you want them.** `Show all fishing tackle` under
-Options lists everything the game has — 159 baits and 29 lures — instead of only
-the ones your current fish need.
+   Enter the full path to the **DLL**, not the folder, and press **+**:
 
-The added entries start at **target 0** and are never bought until you set a
-number. With the normal defaults the plugin would otherwise have tried to stock
-128 more baits at once, three of which cost 99,999 gil each.
+   ```
+   C:\Plugins\MasterBaiter\MasterBaiter.dll
+   ```
 
----
+3. **Enable it.** Open the plugin installer, find **MasterBaiter** among the dev
+   plugins, and switch it on.
 
-## What is new in 0.3.3
+If nothing appears either way, check `/xllog` — a failed load always leaves a
+message there.
 
-**A line in chat when something finishes.** Every result used to live in
-`/xllog`, where nobody looks unless something is already wrong. A run, a scrip
-sweep, a market board visit and a route each report one line now; failures stand
-out as errors. Toggleable under Options, and only you see it.
-
-**Tests for the two rules that cost something when they are wrong** — which
-market board listing to buy, and which menu entry leads to the bait. Both had
-misfired during development: a stack larger than the shortfall must never win,
-and the Cosmocredit bait sits under "(Materials/Materia/Items)", so scoring
-"Materia" down would be wrong however sensible it sounds. Those cases are now
-written down rather than rediscovered.
-
----
-
-## What is new in 0.3.2
-
-**Routes reach the Cosmic Exploration planets.** `Go` already got there, but the
-route planner asked a different question about reachability and quietly left
-those vendors out. All three places — the button, the planner and the self-check
-— now ask the same one.
-
-**Several stalls are gone.** A scrip exchange that opened on an empty tab was
-skipped; an open shop window made Lifestream refuse the next teleport; an
-aethernet hop fired before the teleport had landed; and a market board search
-that went unanswered left the route waiting forever. Each of those now retries
-or moves on, and says so.
-
-**207 bogus teleport points removed.** The game data names a nearby city
-aetheryte for many zones that have none of their own. That is not the same as
-being able to get there: teleporting to Foundation leaves you a zone away from
-The Firmament, which is now reported as unreachable instead of failing after the
-teleport.
-
-**Idyllshire first among scrip exchanges.** It carries the bait of every
-expansion, so one stop replaces several.
-
-**New settings.** `Speed %` sets how briskly the plugin acts — 100 is the
-default, 50 twice as fast. `Use Sprint` uses Sprint while travelling.
-
----
-
-## What is new in 0.3.1
-
-**`Export log to desktop`** under Options → Diagnostics, so a problem can be
-reported without digging through `dalamud.log` — and without passing on what
-other plugins logged.
-
----
-
-## What is new in 0.3.0
-
-**Cosmic Exploration works.** Baits sold on the planets used to be listed as
-unreachable, because no aetheryte goes there. The plugin now teleports to
-Bestways Burrow, walks to Drivingway the Moon Rover in Mare Lamentorum, picks
-the planet, blasts off and buys at the vendor — in one go.
-
-**Greeting boxes no longer block travel.** An NPC that says something before
-opening its shop was previously talked over again and again, which reset the
-dialogue every time. Any NPC with a greeting was effectively unreachable.
-
-**Purchases no longer fail silently.** Buying started in the same instant the
-shop window opened, when it was still empty, so nothing was found and nothing
-was said. It now waits for the shop to list its items, and if it still buys
-nothing it writes down why.
-
-**The dialog choice is explained.** When an NPC offers several shops, the log
-shows how each option scored, so a wrong pick can be understood instead of
-guessed at.
-
-**Delays vary instead of being fixed.** Fixed millisecond values were a bet on
-the game always answering at the same speed, and it does not. Note that this
-makes the plugin no harder to detect — it only makes it less brittle.
-
----
-
-## What is new in 0.2.0
-
-**Lures are counted separately from bait.** They cost ten to a thousand times as
-much, so 300 of them is never what you meant. Bait keeps its own target, lures
-get theirs, 10 by default.
-
-**Scrip exchanges work.** The exchange window only ever shows one subcategory,
-and bait is spread over several, so a single run found almost nothing before.
-`Buy missing` now walks every category and subcategory that carries bait and
-buys on each.
-
-**Scrip and menu vendors are reachable.** Many NPCs list a dialog menu rather
-than a shop, and their bait looked like it had no vendor at all. Following that
-menu found 28 more shops; every bait now has either a vendor or a recipe.
-
-**Vendors are preferred by currency:** gil shop, then Cosmic Exploration, then
-scrip exchange. Gil can be earned back, scrips cannot.
-
-**The market board is supported.** Off by default. It travels there, searches,
-and buys within a price per item and a total per run — and never a stack larger
-than what you are missing.
-
-**Two tabs.** The buttons you press while playing stay with the table;
-everything you set once moved to Options.
-
-**A crash is fixed.** The teleport list was rebuilt hundreds of times per frame
-from the window drawing code, which could take the game down during a zone
-change. It is now read on a timer and only while logged in.
+**Commands:** `/masterbaiter` or `/mbait`
 
 ---
 
@@ -213,97 +98,6 @@ If vnavmesh or Lifestream is missing, the plugin says so in its window and in
 working, but you would be buying at vendors you walked to yourself.
 
 Requires Dalamud API level 15 or newer.
-
----
-
-<!-- repo-only -->
-## Building from source
-
-```bash
-cd MasterBaiter && dotnet build -c Release
-```
-
-Needs the **.NET 10 SDK** — Dalamud API 15 runs on .NET 10, not 9 — and an
-XIVLauncher installation, because the build references the Dalamud libraries in
-`%APPDATA%XIVLauncheraddonHooksdev`. The result lands in
-`MasterBaiter/bin/`.
-
-Tests cover the rules where a mistake is expensive or silent — which listing to
-buy, which menu entry leads to the bait, how the delays scale:
-
-```bash
-cd tests/MasterBaiter.Tests && dotnet test -c Release
-```
-
-Use `-c Release`. A debug run writes to `bin/Debug/` and leaves the
-release build alone, which is what a running game has loaded.
-
-Packaging is `node tools/package.js`: it copies the DLL and the manifest,
-generates the shipped README from this one, and writes the ZIP to `dist/`.
-Nothing under `dist/` is kept in the repository — the ZIP is published as a
-release asset.
-
-Two data files under `data/` are embedded into the DLL and regenerated by the
-scripts in `tools/`: the fish-to-bait table from GatherBuddy Reborn, and vendor
-coordinates for the NPCs the game’s own location sheet does not place.
-
----
-
-<!-- /repo-only -->
-## Installation
-
-### The easy way: add the repository
-
-In game, open Dalamud settings:
-
-```
-/xlsettings  ->  tab "Experimental"  ->  "Custom Plugin Repositories"
-```
-
-Paste this URL, press **+**, then **Save**:
-
-```
-https://raw.githubusercontent.com/trumph21/MasterBaiter/main/repo.json
-```
-
-**MasterBaiter** then appears in the plugin installer under *All Plugins* and
-updates itself like any other plugin.
-
-### The manual way
-
-Use this if you would rather not add a repository, or you are working on the
-plugin yourself.
-
-1. **Unpack** `MasterBaiter.zip` from the
-   [releases page](https://github.com/trumph21/MasterBaiter/releases) into a
-   folder somewhere permanent. The folder must be **named exactly
-   MasterBaiter** — Dalamud rejects the path otherwise, and moving it later
-   breaks the link:
-
-   ```
-   C:\Plugins\MasterBaiter\
-   ```
-
-2. **Register the path.** In game, open Dalamud settings:
-
-   ```
-   /xlsettings  →  tab "Experimental"  →  "Dev Plugin Locations"
-   ```
-
-   Enter the full path to the DLL and press the **+** button:
-
-   ```
-   C:\Plugins\MasterBaiter\MasterBaiter.dll
-   ```
-
-3. **Enable it.** Open the plugin installer, find **MasterBaiter** among the dev
-   plugins, and switch it on.
-
-Installed this way, the plugin does not update itself.
-
-If nothing appears, check `/xllog` — a failed load always leaves a message there.
-
-**Commands:** `/masterbaiter` or `/mbait`
 
 ---
 
@@ -476,8 +270,217 @@ spends gil. Watch it the first few times. Varying the delays does not hide any
 of this: using a plugin at all is what carries the risk, not how evenly it
 clicks.
 
+<!-- repo-only -->
+---
+
+## Building from source
+
+```bash
+cd MasterBaiter && dotnet build -c Release
+```
+
+Needs the **.NET 10 SDK** — Dalamud API 15 runs on .NET 10, not 9 — and an
+XIVLauncher installation, because the build references the Dalamud libraries in
+`%APPDATA%\XIVLauncher\addon\Hooks\dev`. The result lands in
+`MasterBaiter/bin/`.
+
+Tests cover the rules where a mistake is expensive or silent — which listing to
+buy, which menu entry leads to the bait, how the delays scale:
+
+```bash
+cd tests/MasterBaiter.Tests && dotnet test -c Release
+```
+
+Use `-c Release`. A debug run writes to `bin/Debug/` and leaves the
+release build alone, which is what a running game has loaded.
+
+Packaging is `node tools/package.js`: it copies the DLL and the manifest,
+generates the shipped README from this one, and writes the ZIP to `dist/`.
+Nothing under `dist/` is kept in the repository — the ZIP is published as a
+release asset.
+
+Two data files under `data/` are embedded into the DLL and regenerated by the
+scripts in `tools/`: the fish-to-bait table from GatherBuddy Reborn, and vendor
+coordinates for the NPCs the game’s own location sheet does not place.
+
+<!-- /repo-only -->
+
 ---
 
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+---
+
+## Changelog
+
+### 0.3.7
+
+**`/mbait` appears in `/xlhelp`.** The short form has always worked, but it was
+registered as hidden, so the only way to learn it was to read the installer
+description. A command nobody can find is not a command.
+
+### 0.3.6
+
+A pass over the window. Nothing about what the plugin does changed.
+
+**The Go buttons stand in one column.** They used to sit directly behind the
+vendor text, and that text is sometimes `market` and sometimes `17 vendors`, so
+every button was somewhere else and the eye had to find it again in each row. In
+the widest case the button was pushed past the edge of a fixed 90-point column
+and could not be clicked at all.
+
+**Numbers are centred, with their headings above them.** `Have` and `Missing`
+were right-aligned, the target was left-aligned inside a box, and every heading
+sat at the left edge regardless. The vertical grid lines are gone as well: a row
+is read across, and the lines cut it into pieces.
+
+**The target is a number now.** Twenty framed input boxes stacked down the
+column were the loudest thing in the table. Click the number and the field
+appears, focused and selected, so you can just type.
+
+**Honey yellow.** One accent colour, on the missing amount, the active tab,
+check marks and sliders. Resting surfaces stay near-neutral, because a saturated
+yellow that is darkened is brown, and brown buttons were not the intent. Options
+has a switch to turn it off, since it overrides your Dalamud style for this one
+window.
+
+**The title bar names the version**, read from the assembly rather than kept by
+hand in a second place.
+
+### 0.3.5
+
+**Shorter walks, everywhere.** Only 28 of 452 aetherytes had a position the
+plugin could read, because it looked at the wrong side of the link — a location
+row points at an aetheryte, not the other way round. "The nearest aetheryte" was
+therefore mostly whichever came first in the sheet. In Limsa that meant walking
+149 units to a market board with two others sitting 40 away. Now 101 have a
+position, and the walk there takes eight seconds instead of twenty-three.
+
+**Buying checks the currency first.** Without enough scrips a purchase used to
+be attempted, wait five seconds for a confirmation that never came, and repeat —
+three times per bait. Fifteen baits made that minutes of nothing. The price and
+the currency are in the shop window, so the question can be answered before it
+is asked. Partial funds now buy what they cover instead of nothing.
+
+**A refused teleport no longer loses the stop.** Lifestream sometimes declines
+for a moment; it is now retried for up to 25 seconds. One refusal used to cost a
+vendor carrying nineteen baits.
+
+**"Nothing listed" is said plainly.** A bait with no offers on the market board
+looks exactly like an unanswered query from the outside, so the message names
+both possibilities rather than claiming a cause, and the table shows
+`none listed`.
+
+**Two buttons removed.** `Buy missing` and `Buy on market board` are gone;
+buying happens where the plugin travelled to, through `Run route` or `Go`. The
+per-row `Buy` button at an open shop stays.
+
+### 0.3.4
+
+**All 188 baits and lures, if you want them.** `Show all fishing tackle` under
+Options lists everything the game has — 159 baits and 29 lures — instead of only
+the ones your current fish need.
+
+The added entries start at **target 0** and are never bought until you set a
+number. With the normal defaults the plugin would otherwise have tried to stock
+128 more baits at once, three of which cost 99,999 gil each.
+
+### 0.3.3
+
+**A line in chat when something finishes.** Every result used to live in
+`/xllog`, where nobody looks unless something is already wrong. A run, a scrip
+sweep, a market board visit and a route each report one line now; failures stand
+out as errors. Toggleable under Options, and only you see it.
+
+**Tests for the two rules that cost something when they are wrong** — which
+market board listing to buy, and which menu entry leads to the bait. Both had
+misfired during development: a stack larger than the shortfall must never win,
+and the Cosmocredit bait sits under "(Materials/Materia/Items)", so scoring
+"Materia" down would be wrong however sensible it sounds. Those cases are now
+written down rather than rediscovered.
+
+### 0.3.2
+
+**Routes reach the Cosmic Exploration planets.** `Go` already got there, but the
+route planner asked a different question about reachability and quietly left
+those vendors out. All three places — the button, the planner and the self-check
+— now ask the same one.
+
+**Several stalls are gone.** A scrip exchange that opened on an empty tab was
+skipped; an open shop window made Lifestream refuse the next teleport; an
+aethernet hop fired before the teleport had landed; and a market board search
+that went unanswered left the route waiting forever. Each of those now retries
+or moves on, and says so.
+
+**207 bogus teleport points removed.** The game data names a nearby city
+aetheryte for many zones that have none of their own. That is not the same as
+being able to get there: teleporting to Foundation leaves you a zone away from
+The Firmament, which is now reported as unreachable instead of failing after the
+teleport.
+
+**Idyllshire first among scrip exchanges.** It carries the bait of every
+expansion, so one stop replaces several.
+
+**New settings.** `Speed %` sets how briskly the plugin acts — 100 is the
+default, 50 twice as fast. `Use Sprint` uses Sprint while travelling.
+
+### 0.3.1
+
+**`Export log to desktop`** under Options → Diagnostics, so a problem can be
+reported without digging through `dalamud.log` — and without passing on what
+other plugins logged.
+
+### 0.3.0
+
+**Cosmic Exploration works.** Baits sold on the planets used to be listed as
+unreachable, because no aetheryte goes there. The plugin now teleports to
+Bestways Burrow, walks to Drivingway the Moon Rover in Mare Lamentorum, picks
+the planet, blasts off and buys at the vendor — in one go.
+
+**Greeting boxes no longer block travel.** An NPC that says something before
+opening its shop was previously talked over again and again, which reset the
+dialogue every time. Any NPC with a greeting was effectively unreachable.
+
+**Purchases no longer fail silently.** Buying started in the same instant the
+shop window opened, when it was still empty, so nothing was found and nothing
+was said. It now waits for the shop to list its items, and if it still buys
+nothing it writes down why.
+
+**The dialog choice is explained.** When an NPC offers several shops, the log
+shows how each option scored, so a wrong pick can be understood instead of
+guessed at.
+
+**Delays vary instead of being fixed.** Fixed millisecond values were a bet on
+the game always answering at the same speed, and it does not. Note that this
+makes the plugin no harder to detect — it only makes it less brittle.
+
+### 0.2.0
+
+**Lures are counted separately from bait.** They cost ten to a thousand times as
+much, so 300 of them is never what you meant. Bait keeps its own target, lures
+get theirs, 10 by default.
+
+**Scrip exchanges work.** The exchange window only ever shows one subcategory,
+and bait is spread over several, so a single run found almost nothing before.
+`Buy missing` now walks every category and subcategory that carries bait and
+buys on each.
+
+**Scrip and menu vendors are reachable.** Many NPCs list a dialog menu rather
+than a shop, and their bait looked like it had no vendor at all. Following that
+menu found 28 more shops; every bait now has either a vendor or a recipe.
+
+**Vendors are preferred by currency:** gil shop, then Cosmic Exploration, then
+scrip exchange. Gil can be earned back, scrips cannot.
+
+**The market board is supported.** Off by default. It travels there, searches,
+and buys within a price per item and a total per run — and never a stack larger
+than what you are missing.
+
+**Two tabs.** The buttons you press while playing stay with the table;
+everything you set once moved to Options.
+
+**A crash is fixed.** The teleport list was rebuilt hundreds of times per frame
+from the window drawing code, which could take the game down during a zone
+change. It is now read on a timer and only while logged in.
