@@ -304,3 +304,9 @@ That is why the option exists and why it is off by default.
 spends gil. Watch it the first few times. Varying the delays does not hide any
 of this: using a plugin at all is what carries the risk, not how evenly it
 clicks.
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE).

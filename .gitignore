@@ -2,6 +2,10 @@
 bin/
 obj/
 
+# Packaged artefacts — published as GitHub releases, not committed
+dist/*.zip
+dist/MasterBaiter/*.dll
+
 # Visual Studio / Rider
 .vs/
 .idea/
