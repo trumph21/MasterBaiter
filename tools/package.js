@@ -30,6 +30,7 @@ const root = path.resolve(__dirname, "..");
 const dist = path.join(root, "dist");
 const stage = path.join(dist, "MasterBaiter");
 const repoUrl = "https://github.com/trumph21/MasterBaiter";
+const rawUrl = "https://raw.githubusercontent.com/trumph21/MasterBaiter/main";
 
 function fail(message) {
   console.error(`package: ${message}`);
@@ -88,6 +89,11 @@ const entry = {
   DalamudApiLevel: manifest.DalamudApiLevel,
   RepoUrl: repoUrl,
   Tags: manifest.Tags,
+  // Dalamud zeigt das Bild im Installer. Fehlt die Datei, bleibt das Feld weg —
+  // ein toter Link waere schlechter als das Fragezeichen.
+  ...(fs.existsSync(path.join(root, "images", "icon.png"))
+    ? { IconUrl: `${rawUrl}/images/icon.png` }
+    : {}),
   AcceptsFeedback: manifest.AcceptsFeedback ?? false,
   IsHide: false,
   LastUpdate: Math.floor(Date.now() / 1000),

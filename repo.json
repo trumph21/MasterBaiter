@@ -19,9 +19,10 @@
       "cosmic exploration",
       "gatherbuddy"
     ],
+    "IconUrl": "https://raw.githubusercontent.com/trumph21/MasterBaiter/main/images/icon.png",
     "AcceptsFeedback": false,
     "IsHide": false,
-    "LastUpdate": 1788719655,
+    "LastUpdate": 1788720511,
     "DownloadCount": 0,
     "DownloadLinkInstall": "https://github.com/trumph21/MasterBaiter/releases/latest/download/MasterBaiter.zip",
     "DownloadLinkUpdate": "https://github.com/trumph21/MasterBaiter/releases/latest/download/MasterBaiter.zip",
