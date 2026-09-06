@@ -10,6 +10,22 @@ the market board.
 
 ---
 
+## What is new in 0.3.3
+
+**A line in chat when something finishes.** Every result used to live in
+`/xllog`, where nobody looks unless something is already wrong. A run, a scrip
+sweep, a market board visit and a route each report one line now; failures stand
+out as errors. Toggleable under Options, and only you see it.
+
+**Tests for the two rules that cost something when they are wrong** — which
+market board listing to buy, and which menu entry leads to the bait. Both had
+misfired during development: a stack larger than the shortfall must never win,
+and the Cosmocredit bait sits under "(Materials/Materia/Items)", so scoring
+"Materia" down would be wrong however sensible it sounds. Those cases are now
+written down rather than rediscovered.
+
+---
+
 ## What is new in 0.3.2
 
 **Routes reach the Cosmic Exploration planets.** `Go` already got there, but the
