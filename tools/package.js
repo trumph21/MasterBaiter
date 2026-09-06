@@ -1,4 +1,4 @@
-// Baut das Auslieferungspaket in dist/.
+// Baut das Auslieferungspaket in dist/ und die Repository-Datei repo.json.
 //
 // Der Grund fuer dieses Skript: README und Manifest lagen zweimal im Baum, in
 // der Wurzel und noch einmal unter dist/. Zwei Kopien laufen auseinander — der
@@ -6,10 +6,19 @@
 // ausgelieferte aktuell war. Jetzt gibt es je eine Quelle, und dist/ ist
 // vollstaendig erzeugt.
 //
-//   README.md                     -> dist/MasterBaiter/README.md (ohne Bau-Abschnitt)
+//   README.md                      -> dist/MasterBaiter/README.md (ohne Bau-Abschnitt)
 //   MasterBaiter/MasterBaiter.json -> dist/MasterBaiter/MasterBaiter.json
 //   MasterBaiter/bin/*.dll         -> dist/MasterBaiter/MasterBaiter.dll
-//   alles zusammen                 -> dist/MasterBaiter-<version>.zip
+//   alles zusammen                 -> dist/MasterBaiter.zip
+//   dasselbe Manifest              -> repo.json
+//
+// Zwei Dinge sind fuer Dalamud zwingend und leicht zu uebersehen:
+//
+//   1. Die Dateien muessen im WURZELVERZEICHNIS der ZIP liegen. Ein Unterordner
+//      wird nicht ausgepackt, das Plugin gilt dann als fehlerhaft.
+//   2. Der Downloadlink braucht einen festen Namen. Ein Link auf
+//      MasterBaiter-0.3.2.zip zeigt nach der naechsten Version ins Leere, und
+//      Dalamud meldet nur "Download fehlgeschlagen".
 //
 // Aufruf: node tools/package.js   (aus dem Projektstamm)
 
@@ -20,6 +29,7 @@ const { execFileSync } = require("child_process");
 const root = path.resolve(__dirname, "..");
 const dist = path.join(root, "dist");
 const stage = path.join(dist, "MasterBaiter");
+const repoUrl = "https://github.com/trumph21/MasterBaiter";
 
 function fail(message) {
   console.error(`package: ${message}`);
@@ -57,11 +67,37 @@ fs.copyFileSync(dll, path.join(stage, "MasterBaiter.dll"));
 fs.copyFileSync(manifestPath, path.join(stage, "MasterBaiter.json"));
 fs.writeFileSync(path.join(stage, "README.md"), shipped);
 
-const zip = path.join(dist, `MasterBaiter-${version}.zip`);
+// Inhalt des Ordners, nicht der Ordner selbst — siehe Punkt 1 oben.
+const zip = path.join(dist, "MasterBaiter.zip");
 execFileSync("powershell.exe", [
   "-NoProfile", "-Command",
-  `Compress-Archive -Path '${stage}' -DestinationPath '${zip}' -Force`,
+  `Compress-Archive -Path '${path.join(stage, "*")}' -DestinationPath '${zip}' -Force`,
 ], { stdio: "inherit" });
 
+// ---- repo.json fuer die Plugin-Verwaltung in Dalamud ----
+const download = `${repoUrl}/releases/latest/download/MasterBaiter.zip`;
+const entry = {
+  Author: manifest.Author,
+  Name: manifest.Name,
+  InternalName: manifest.InternalName,
+  AssemblyVersion: manifest.AssemblyVersion,
+  Description: manifest.Description,
+  Punchline: manifest.Punchline,
+  Changelog: manifest.Changelog,
+  ApplicableVersion: manifest.ApplicableVersion,
+  DalamudApiLevel: manifest.DalamudApiLevel,
+  RepoUrl: repoUrl,
+  Tags: manifest.Tags,
+  AcceptsFeedback: manifest.AcceptsFeedback ?? false,
+  IsHide: false,
+  LastUpdate: Math.floor(Date.now() / 1000),
+  DownloadCount: 0,
+  DownloadLinkInstall: download,
+  DownloadLinkUpdate: download,
+  DownloadLinkTesting: download,
+};
+
+fs.writeFileSync(path.join(root, "repo.json"), JSON.stringify([entry], null, 2) + "\n");
+
 const size = (fs.statSync(zip).size / 1024).toFixed(0);
-console.log(`package: MasterBaiter ${version} -> dist/MasterBaiter-${version}.zip (${size} KB)`);
+console.log(`package: MasterBaiter ${version} -> dist/MasterBaiter.zip (${size} KB), repo.json updated`);

@@ -146,13 +146,33 @@ coordinates for the NPCs the game’s own location sheet does not place.
 <!-- /repo-only -->
 ## Installation
 
-Download the latest ZIP from the
-[releases page](https://github.com/trumph21/MasterBaiter/releases).
+### The easy way: add the repository
 
-This is a dev plugin, so it is not installed through the plugin installer's
-search. It takes one setup step.
+In game, open Dalamud settings:
 
-1. **Unpack** it somewhere permanent — moving it later breaks the link:
+```
+/xlsettings  ->  tab "Experimental"  ->  "Custom Plugin Repositories"
+```
+
+Paste this URL, press **+**, then **Save**:
+
+```
+https://raw.githubusercontent.com/trumph21/MasterBaiter/main/repo.json
+```
+
+**MasterBaiter** then appears in the plugin installer under *All Plugins* and
+updates itself like any other plugin.
+
+### The manual way
+
+Use this if you would rather not add a repository, or you are working on the
+plugin yourself.
+
+1. **Unpack** `MasterBaiter.zip` from the
+   [releases page](https://github.com/trumph21/MasterBaiter/releases) into a
+   folder somewhere permanent. The folder must be **named exactly
+   MasterBaiter** — Dalamud rejects the path otherwise, and moving it later
+   breaks the link:
 
    ```
    C:\Plugins\MasterBaiter\
@@ -172,6 +192,8 @@ search. It takes one setup step.
 
 3. **Enable it.** Open the plugin installer, find **MasterBaiter** among the dev
    plugins, and switch it on.
+
+Installed this way, the plugin does not update itself.
 
 If nothing appears, check `/xllog` — a failed load always leaves a message there.
 
