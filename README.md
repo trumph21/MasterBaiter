@@ -315,6 +315,48 @@ MIT — see [LICENSE](LICENSE).
 
 ## Changelog
 
+### 0.4.3
+
+**Routes are planned around the money you have.** A run used to travel to the
+scrip exchange and then report four baits skipped for want of scrips — the
+checking happened at the counter, after the journey. Planning now asks first,
+and a vendor whose price you cannot pay is not a stop. The balance is carried
+through the plan, so two exchanges taking the same scrips do not both count on
+the same pile.
+
+Three deliberate limits: a partly affordable bait still counts, because twenty
+of three hundred is a reason to go and none is not; a bait with no known price
+counts as payable, since that is the normal case at gil vendors and refusing to
+travel over a missing record would be worse; and an unreadable balance counts as
+unlimited, because not knowing is not the same as knowing there is nothing.
+
+**Balances are remembered.** Cosmocredits are only readable while you are in
+Cosmic Exploration and read as zero everywhere else — so the planner concluded
+you were broke and dropped every Cosmic stop. A reading above zero is taken and
+kept; a zero is not believed when more was seen before. Purchases subtract what
+they cost, which is the one moment a change to the balance is certain.
+
+**Your balances are in the toolbar**, on the right, each currency in its own
+colour — Cosmocredits cyan, Purple scrips violet, Gil honey. Numbers are white
+while they are being read and grey when they come from memory, and hovering
+gives the exact amount and its age. It is the number the route now depends on,
+so it should not be hidden.
+
+**The market board is chosen near the end of the route.** It is appended as the
+last stop, but the choice was made from where you stood while planning — which
+added a teleport across the world when the route ended somewhere else.
+
+**A stop in the zone you are already in may cover one bait fewer and still
+win.** "Covers the most" used to outrank everything, so the route would fly
+around the world for a single extra item.
+
+**Two new Debug buttons.** `Explain route` writes, for every missing bait, each
+vendor that sells it, whether it is reachable, what it costs there and whether
+that is payable — the four facts the decision is made from. `Dump currencies`
+shows what is readable here beside what is remembered.
+
+---
+
 ### 0.4.2
 
 **A mount, and flight where you have it.** Two switches under Options → Travel.

@@ -85,6 +85,10 @@ public sealed class Plugin : IDalamudPlugin
         // Reach beantwortet die Frage nach der Erreichbarkeit fuer alle
         // Aufrufer an einer Stelle und braucht dafuer den Cosmic-Weg.
         Reach.Cosmic = _cosmic;
+
+        // Waehrungen, die nur an bestimmten Orten lesbar sind, brauchen ein
+        // Gedaechtnis — und das steht im Spielstand.
+        Wallet.Store = _config;
         _route = new Route(_config, restock, vendors, _travel, _queue, _sweep, _market, _cosmic);
 
         // Waehrend einer Route steuert die Route den Kauf, nicht dieser Haken.
@@ -176,6 +180,9 @@ public sealed class Plugin : IDalamudPlugin
         Mount.Tick(_config, _travel, _route, _cosmic);
         Teleportable.Tick();
         _restock.SaddlebagTick();
+
+        // Ortsgebundene Waehrungen nachlesen, solange sie lesbar sind.
+        Wallet.Tick();
 
         // Was bei den Gehilfen liegt, sieht das Spiel nur, solange einer offen
         // ist. Also mitschreiben, wann immer das der Fall ist.

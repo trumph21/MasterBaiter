@@ -323,7 +323,7 @@ internal sealed unsafe class MarketBoard(Configuration config, Restock restock)
         _awaitingResult = true;
         _resultDeadline = now + ResultTimeoutMs;
         _nextAt = Pacing.NextWithPause(DelayMs);
-        Status = $"{Restock.ItemName(baitId)}: {quantity} for {cost} gil";
+        Status = $"{Restock.ItemName(baitId)}: {quantity} for {cost} Gil";
         Plugin.Log.Information($"[MasterBaiter] Buying {quantity}x {Restock.ItemName(baitId)} " +
                                $"at {unitPrice} gil each ({cost} gil).");
     }

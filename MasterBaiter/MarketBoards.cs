@@ -124,12 +124,20 @@ internal static class MarketBoards
     /// dann entscheidet die Entfernung zum Aetheryten — sonst laeuft man in
     /// Limsa quer durch die Stadt, obwohl eines direkt am Plaza steht.
     /// </summary>
-    public static VendorIndex.Vendor? Nearest(Configuration config, VendorIndex vendors)
+    /// <summary>
+    /// Das naechstgelegene Marktbrett.
+    ///
+    /// <paramref name="from"/> ist das Gebiet, aus dem man kommt — bei einer
+    /// Route das des letzten Halts, nicht das, in dem der Spieler gerade steht.
+    /// Das Brett haengt hinten an; naeher heisst also naeher am Ende der Route.
+    /// Ohne Angabe zaehlt der aktuelle Standort.
+    /// </summary>
+    public static VendorIndex.Vendor? Nearest(Configuration config, VendorIndex vendors, uint from = 0)
     {
         if (!vendors.Ready)
             return null;
 
-        var here = Plugin.ClientState.TerritoryType;
+        var here = from != 0 ? from : Plugin.ClientState.TerritoryType;
         VendorIndex.Vendor? best = null;
         var bestScore = float.MaxValue;
 

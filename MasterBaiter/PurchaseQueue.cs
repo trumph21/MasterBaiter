@@ -39,6 +39,8 @@ internal sealed class PurchaseQueue(Configuration config)
     private int _requested;
     private int _index;
     private int _dialogTries;
+    private uint _payingWith;
+    private uint _unitPrice;
 
     public bool Running { get; private set; }
     public string Status { get; private set; } = string.Empty;
@@ -203,6 +205,11 @@ internal sealed class PurchaseQueue(Configuration config)
         {
             var currencyId = shopEntry.CurrencyId != 0 ? shopEntry.CurrencyId : GilItemId;
             var available = Restock.CountInInventory(currencyId);
+
+            // Am Laden ist die Waehrung lesbar, auch eine ortsgebundene. Das
+            // ist die verlaesslichste Gelegenheit, das Gedaechtnis zu fuellen.
+            if (available > 0)
+                Wallet.Remember(currencyId, available);
             var affordable = available / (int)shopEntry.Price;
 
             if (affordable <= 0)
@@ -249,6 +256,8 @@ internal sealed class PurchaseQueue(Configuration config)
         _countBefore = have;
         _requested = amount;
         _index = index;
+        _payingWith = shopEntry.CurrencyId != 0 ? shopEntry.CurrencyId : GilItemId;
+        _unitPrice = shopEntry.Price;
 
         if (!ShopWindowReader.Buy(index, amount))
         {
@@ -278,6 +287,12 @@ internal sealed class PurchaseQueue(Configuration config)
 
             var gained = have - _countBefore;
             _totalItems += gained;
+
+            // Was hier ausgegeben wurde, ist die einzige zuverlaessige
+            // Aenderung am Bestand — und bei einer Waehrung, die anderswo nicht
+            // lesbar ist, die einzige Gelegenheit, das mitzubekommen.
+            if (_unitPrice > 0 && _payingWith != 0)
+                Wallet.Spend(_payingWith, (int)(gained * _unitPrice));
             Plugin.Log.Information(
                 $"[MasterBaiter] {job.Name}: +{gained} (requested {_requested}), have {have}/{job.Target}."
                 + (gained != _requested ? "  WARNING: amount differs." : string.Empty));

@@ -23,6 +23,11 @@ internal sealed class MainWindow : Window
     // und fuer jedes ueber alle Aetheryten. Einmal je Sekunde reicht.
     private VendorIndex.Vendor? _board;
     private long _boardAt;
+
+    // Der Beutelinhalt geht ueber alle Zeilen und alle ihre Preise. Einmal je
+    // Sekunde reicht, wie bei der Routenplanung.
+    private List<Purse.Holding> _purse = [];
+    private long _purseAt;
     private readonly VendorIndex _vendors;
     private readonly RetainerStock _retainers;
     private readonly Travel _travel;
@@ -241,6 +246,124 @@ internal sealed class MainWindow : Window
             ImGui.SameLine();
             ImGui.TextUnformatted(_message);
         }
+
+        DrawPurse();
+    }
+
+    /// <summary>
+    /// Was im Beutel ist, rechts in der Leiste.
+    ///
+    /// Es ist die Zahl, an der die Routenplanung haengt: Ohne Scrips faellt
+    /// der Scrip-Halt weg, und ohne diese Anzeige waere das eine stille
+    /// Entscheidung, deren Grund man nirgends sieht.
+    ///
+    /// Ein gemerkter Wert steht gedaempft — er ist eine Erinnerung, keine
+    /// Ablesung, und das soll man sehen koennen, ohne den Hinweistext zu
+    /// oeffnen.
+    /// </summary>
+    private void DrawPurse()
+    {
+        var purse = CachedPurse();
+        if (purse.Count == 0)
+            return;
+
+        var parts = purse.Select(h => Shorten($"{Compact(h.Amount)} {h.Currency}")).ToList();
+        var width = ImGui.CalcTextSize(string.Join("   ", parts)).X;
+
+        ImGui.SameLine();
+        var space = ImGui.GetContentRegionAvail().X;
+        if (space > width)
+            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + space - width);
+
+        var gap = ImGui.CalcTextSize(" ").X;
+
+        for (var i = 0; i < purse.Count; i++)
+        {
+            if (i > 0)
+                ImGui.SameLine(0, ImGui.CalcTextSize("   ").X);
+
+            var holding = purse[i];
+
+            // Die Zahl weiss, der Waehrungsname in seiner eigenen Farbe: Die
+            // Scrips heissen nach ihrer Farbe, also ist sie das schnellste
+            // Erkennungsmerkmal — schneller als der gelesene Name.
+            //
+            // Eine gemerkte Zahl steht grau statt weiss. Der Unterschied
+            // zwischen Ablesung und Erinnerung darf nicht verlorengehen, nur
+            // weil die Farbe jetzt die Waehrung bezeichnet.
+            var split = parts[i].IndexOf(' ');
+            var number = split < 0 ? parts[i] : parts[i][..split];
+            var name = split < 0 ? string.Empty : parts[i][(split + 1)..];
+
+            ImGui.BeginGroup();
+            ImGui.TextColored(holding.Live ? White : Dim, number);
+
+            if (name.Length > 0)
+            {
+                ImGui.SameLine(0, gap);
+                ImGui.TextColored(CurrencyColour(holding.Currency), name);
+            }
+
+            ImGui.EndGroup();
+
+            if (!ImGui.IsItemHovered())
+                continue;
+
+            ImGui.SetTooltip($"{holding.Amount:N0} {holding.Currency}" + Environment.NewLine +
+                (holding.Live
+                    ? "Readable here."
+                    : holding.Seen is { } when
+                        ? $"Not readable here — remembered from {Ago(when)}."
+                        : "Not readable here."));
+        }
+    }
+
+    private static readonly Vector4 White = new(0.95f, 0.95f, 0.95f, 1f);
+    private static readonly Vector4 Cyan = new(0.36f, 0.84f, 0.94f, 1f);
+    private static readonly Vector4 Orange = new(1f, 0.62f, 0.25f, 1f);
+    private static readonly Vector4 Purple = new(0.72f, 0.55f, 0.95f, 1f);
+    private static readonly Vector4 Crimson = new(0.95f, 0.45f, 0.45f, 1f);
+    private static readonly Vector4 Azure = new(0.45f, 0.65f, 0.98f, 1f);
+
+    /// <summary>
+    /// Die Farbe einer Waehrung.
+    ///
+    /// Die Scrips tragen ihre Farbe im Namen, also wird sie danach vergeben —
+    /// keine Liste bekannter Waehrungen, die jede Erweiterung veraltet, sondern
+    /// die Regel, nach der das Spiel sie benennt.
+    /// </summary>
+    private static Vector4 CurrencyColour(string currency)
+    {
+        bool Has(string word) => currency.Contains(word, StringComparison.OrdinalIgnoreCase);
+
+        if (Has("cosmocredit") || Has("lunar credit")) return Cyan;
+        if (Has("orange")) return Orange;
+        if (Has("purple")) return Purple;
+        if (Has("red")) return Crimson;
+        if (Has("blue")) return Azure;
+        if (Has("yellow") || Has("gil")) return Honey;
+        if (Has("white")) return White;
+
+        return Dim;
+    }
+
+    /// <summary>Grosse Zahlen kurz: 17.705.069 wird zu 17.7M.</summary>
+    private static string Compact(int amount) => amount switch
+    {
+        >= 1_000_000 => $"{amount / 1_000_000.0:0.#}M",
+        >= 10_000 => $"{amount / 1000.0:0.#}k",
+        _ => amount.ToString("N0"),
+    };
+
+    private List<Purse.Holding> CachedPurse()
+    {
+        var now = Environment.TickCount64;
+        if (now < _purseAt)
+            return _purse;
+
+        _purseAt = now + 1000;
+        _purse = Purse.Held(_restock.Rows.SelectMany(r => _vendors.PricesFor(r.BaitId)));
+        return _purse;
     }
 
     /// <summary>Was gerade laeuft, in der Reihenfolge der Dringlichkeit.</summary>
@@ -643,6 +766,33 @@ internal sealed class MainWindow : Window
                              "Useful when something is not recognised.");
 
         ImGui.SameLine();
+        if (ImGui.Button("Explain route"))
+        {
+            ExplainRoute();
+            Notify("Route reasoning written to log.");
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("For every bait still missing: each vendor that sells it, whether it " +
+                             "can be reached," + Environment.NewLine +
+                             "what it costs there, and whether that is payable. The route is built " +
+                             "from these answers." + Environment.NewLine +
+                             "A bait that drops out of the route without a reason here is a bug.");
+
+        ImGui.SameLine();
+        if (ImGui.Button("Dump currencies"))
+        {
+            DumpCurrencies();
+            Notify("Currency balances written to log.");
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Every currency a tracked bait is priced in, with what the plugin " +
+                             "believes you hold." + Environment.NewLine +
+                             "Compare it with the game: a number that reads 0 while you have some " +
+                             "means the balance" + Environment.NewLine +
+                             "is not kept where the plugin looks, and the route planning is wrong " +
+                             "about that currency.");
+
+        ImGui.SameLine();
         if (ImGui.Button("Export log to desktop"))
         {
             LogExport.Run(_config, _vendors, out var result);
@@ -747,7 +897,7 @@ internal sealed class MainWindow : Window
                     if (stop.IsMarketBoard)
                     {
                         if (_market.QuoteFor(row.BaitId) is { UnitPrice: > 0 } quote
-                            && PriceTag.TryParse($"{quote.UnitPrice} gil", out var boardTag))
+                            && PriceTag.TryParse($"{quote.UnitPrice} Gil", out var boardTag))
                             found = boardTag;
                     }
                     else
@@ -822,6 +972,31 @@ internal sealed class MainWindow : Window
             ImGui.TextColored(Dim, unknown == 1
                 ? "1 bait has no known price, so it is not in the total."
                 : $"{unknown} baits have no known price, so they are not in the total.");
+        }
+
+        // Seit die Planung den Geldbeutel kennt, faellt ein Koeder aus der
+        // Route, wenn keine erreichbare Quelle bezahlbar ist. Stillschweigend
+        // waere das die schlechtere Haelfte der Verbesserung: Man saehe nur,
+        // dass er fehlt, nicht warum.
+        var planned = plan.SelectMany(stop => stop.Baits).ToHashSet();
+        var left = _restock.Rows
+            .Where(r => !r.Ignored && r.Missing > 0 && !planned.Contains(r.Name))
+            .ToList();
+
+        if (left.Count > 0)
+        {
+            ImGui.TextColored(Wanted, left.Count == 1
+                ? "1 bait is not in this route."
+                : $"{left.Count} baits are not in this route.");
+
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip(
+                    "No vendor you can reach takes a currency you have enough of." +
+                    Environment.NewLine +
+                    "They come back into the route once you have the currency:" +
+                    Environment.NewLine +
+                    string.Join(Environment.NewLine, left.Take(15).Select(r => r.Name)) +
+                    (left.Count > 15 ? Environment.NewLine + $"and {left.Count - 15} more" : string.Empty));
         }
 
         using (ImRaiiDisabled(_travel.Running || _queue.Running || _sweep.Running
@@ -921,6 +1096,113 @@ internal sealed class MainWindow : Window
 
         if ((clipped || shown != text) && ImGui.IsItemHovered())
             ImGui.SetTooltip(text);
+    }
+
+    /// <summary>
+    /// Schreibt fuer jeden fehlenden Koeder auf, was die Routenplanung ueber
+    /// ihn weiss.
+    ///
+    /// Seit die Planung den Geldbeutel einbezieht, kann ein Koeder aus der
+    /// Route fallen, ohne dass man sieht warum — an der Erreichbarkeit, am
+    /// Preis, an der Waehrung oder am Bestand. Die Entscheidung besteht aus
+    /// vier Angaben, also stehen hier alle vier.
+    /// </summary>
+    private void ExplainRoute()
+    {
+        var open = _restock.Rows.Where(r => !r.Ignored && r.Missing > 0).ToList();
+        if (open.Count == 0)
+        {
+            Plugin.Log.Information("[MasterBaiter] Nothing is missing, so there is nothing to explain.");
+            return;
+        }
+
+        Plugin.Log.Information($"[MasterBaiter] Route reasoning for {open.Count} missing bait(s):");
+
+        foreach (var row in open)
+        {
+            var vendorList = _vendors.For(row.BaitId);
+            if (vendorList.Count == 0)
+            {
+                Plugin.Log.Information($"[MasterBaiter]   {row.Name} x{row.Missing}: no vendor at all.");
+                continue;
+            }
+
+            Plugin.Log.Information(
+                $"[MasterBaiter]   {row.Name} x{row.Missing}: {vendorList.Count} vendor(s), " +
+                $"prices: {string.Join(" | ", _vendors.PricesFor(row.BaitId))}");
+
+            // Je Ladenart genuegt ein Vertreter — zwoelf Gil-Haendler
+            // beantworten dieselbe Frage zwoelfmal.
+            foreach (var kind in vendorList.Select(v => v.Kind).Distinct())
+            {
+                var vendor = vendorList.First(v => v.Kind == kind);
+                var reachable = Reach.CanReach(vendor, out var why);
+
+                var price = _vendors.PricesFor(row.BaitId)
+                    .Select(t => PriceTag.TryParse(t, out var tag) ? tag : (PriceTag?)null)
+                    .FirstOrDefault(t => t?.FitsVendor(kind) == true);
+
+                var cost = price is { } p ? p.TotalFor(row.Missing) : 0;
+                var held = price is { } q ? Wallet.Balance(q.Currency) : null;
+
+                Plugin.Log.Information(
+                    $"[MasterBaiter]     [{vendor.KindName}] {vendor.Npc} in {vendor.Zone}: " +
+                    (reachable ? "reachable" : $"NOT reachable ({why})") + ", " +
+                    (price is { } r
+                        ? $"{cost:N0} {r.Currency} needed, {held?.ToString() ?? "unknown"} held"
+                        : "no price in a currency this vendor takes"));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Schreibt auf, welche Waehrungen ueberhaupt vorkommen und wie viel das
+    /// Plugin davon zu sehen glaubt.
+    ///
+    /// Die Routenplanung entscheidet daran, wohin gefahren wird. Liest sie eine
+    /// Waehrung falsch, sieht das Ergebnis wie eine gute Entscheidung aus —
+    /// deshalb muss die Zahl nachpruefbar sein, statt nur zu wirken.
+    /// </summary>
+    private void DumpCurrencies()
+    {
+        var currencies = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var row in _restock.Rows)
+        foreach (var text in _vendors.PricesFor(row.BaitId))
+            if (PriceTag.TryParse(text, out var tag))
+                currencies.Add(tag.Currency);
+
+        if (currencies.Count == 0)
+        {
+            Plugin.Log.Information("[MasterBaiter] No priced bait, so no currencies to report.");
+            return;
+        }
+
+        foreach (var currency in currencies)
+        {
+            var id = Wallet.IdOf(currency);
+            if (id == null)
+            {
+                Plugin.Log.Information(
+                    $"[MasterBaiter] Currency \"{currency}\": no item id found — treated as unlimited.");
+                continue;
+            }
+
+            // Beides nebeneinander: Weichen sie ab, ist die Waehrung hier nicht
+            // lesbar und die Planung arbeitet mit dem Gedaechtnis.
+            var live = Restock.CountInInventory(id.Value);
+            if (live > 0)
+                Wallet.Remember(id.Value, live);
+
+            var kept = Wallet.Remembered(id.Value);
+            var seen = Wallet.SeenAt(id.Value);
+
+            Plugin.Log.Information(
+                $"[MasterBaiter] Currency \"{currency}\" (item {id}): {live} readable here, " +
+                (kept == null
+                    ? "nothing remembered."
+                    : $"{kept} remembered{(seen is { } when ? $" from {when:HH:mm}" : string.Empty)}."));
+        }
     }
 
     /// <summary>
@@ -1175,7 +1457,7 @@ internal sealed class MainWindow : Window
             if (row.InShop && row.Price > 0)
                 Priced(row.Currency != 0
                     ? $"{row.Price} {Restock.ItemName(row.Currency)}"
-                    : $"{row.Price} gil", null);
+                    : $"{row.Price} Gil", null);
             else if (_vendors.PricesFor(row.BaitId) is { Count: > 0 } prices)
                 PricedAll(prices, Dim);
             else if (_market.QuoteFor(row.BaitId) is { } quote)
@@ -1183,7 +1465,7 @@ internal sealed class MainWindow : Window
                 // Vom Marktbrett, nicht aus den Spieldaten: von einem Spieler
                 // gesetzt und in einer Stunde womoeglich ein anderer. Deshalb
                 // gekennzeichnet und mit Alter im Hinweistext.
-                Centered(quote.UnitPrice > 0 ? $"{quote.UnitPrice} gil ~" : "none listed", Dim);
+                Centered(quote.UnitPrice > 0 ? $"{quote.UnitPrice} Gil ~" : "none listed", Dim);
                 if (ImGui.IsItemHovered())
                 {
                     var age = DateTime.Now - quote.When;

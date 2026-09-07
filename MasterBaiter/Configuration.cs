@@ -109,6 +109,19 @@ internal sealed class Configuration : IPluginConfiguration
     public Dictionary<ulong, RetainerNote> Retainers { get; set; } = new();
 
     /// <summary>
+    /// Der zuletzt gesehene Bestand je Waehrung, mit dem Zeitpunkt.
+    ///
+    /// Noetig, weil nicht jede Waehrung ueberall lesbar ist: Cosmocredits gibt
+    /// das Spiel nur in der Cosmic Exploration heraus, ueberall sonst liest
+    /// sich derselbe Zaehler als null. Ohne Gedaechtnis wuerde die
+    /// Routenplanung ausserhalb der Zone jeden Cosmic-Halt streichen, weil sie
+    /// den Spieler fuer pleite haelt.
+    /// </summary>
+    public Dictionary<uint, int> Currencies { get; set; } = new();
+
+    public Dictionary<uint, DateTime> CurrenciesSeen { get; set; } = new();
+
+    /// <summary>
     /// Zaehlt der Vorrat bei den Gehilfen gegen die Fehlmenge?
     ///
     /// Standardmaessig ja, aber abschaltbar: Anders als die Satteltasche, die

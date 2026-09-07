@@ -40,34 +40,73 @@ internal sealed class Route(Configuration config, Restock restock, VendorIndex v
     public List<RouteStop> Plan()
     {
         var open = new Dictionary<uint, string>();
+        var missing = new Dictionary<uint, int>();
         foreach (var row in restock.Rows)
             if (!row.Ignored && row.Missing > 0)
+            {
                 open[row.BaitId] = row.Name;
+                missing[row.BaitId] = row.Missing;
+            }
 
         var plan = new List<RouteStop>();
         var currentZone = Plugin.ClientState.TerritoryType;
+
+        // Was im Beutel liegt, waehrend der Planung mitgefuehrt: Zwei Staende,
+        // die dieselben Scrips nehmen, teilen sich einen Vorrat. Wer das nicht
+        // mitrechnet, plant den zweiten Halt fuer Geld ein, das der erste
+        // schon ausgegeben hat.
+        //
+        // Eine unbekannte Waehrung gilt als unbegrenzt: Nichtwissen darf keinen
+        // Haendler ausschliessen.
+        var purse = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        int Balance(string currency)
+        {
+            if (!purse.TryGetValue(currency, out var left))
+                purse[currency] = left = Wallet.Balance(currency) ?? int.MaxValue;
+
+            return left;
+        }
 
         while (open.Count > 0)
         {
             // Welcher Haendler deckt am meisten ab?
             var byVendor = new Dictionary<VendorIndex.Vendor, List<string>>();
-            foreach (var (baitId, name) in open)
+            var candidates = new Dictionary<VendorIndex.Vendor, List<uint>>();
+
+            foreach (var (baitId, _) in open)
             foreach (var vendor in vendors.For(baitId))
             {
                 // Nicht nur Teleportziele: Die Planeten der Cosmic
                 // Exploration sind ueber den Fahrzeug-NPC erreichbar.
                 if (!Reach.CanReach(vendor))
                     continue;
-                if (!byVendor.TryGetValue(vendor, out var list))
-                    byVendor[vendor] = list = [];
-                list.Add(name);
+                if (!candidates.TryGetValue(vendor, out var ids))
+                    candidates[vendor] = ids = [];
+                ids.Add(baitId);
+            }
+
+            // Was ist dort mit dem bezahlbar, was gerade da ist?
+            foreach (var (vendor, ids) in candidates)
+            {
+                var payable = Affordable(vendor, ids, missing, Balance);
+                if (payable.Count == 0)
+                    continue;
+
+                byVendor[vendor] = payable.Select(id => open[id]).ToList();
             }
 
             if (byVendor.Count == 0)
                 break;
 
+            // Ein Halt im Gebiet, in dem man ohnehin schon steht, spart eine
+            // ganze Reise. Er darf deshalb einen Koeder weniger abdecken als
+            // ein entfernter und trotzdem gewinnen — ohne diesen Ausgleich
+            // fliegt die Route wegen eines einzigen Postens um die Welt.
+            const int sameZoneWorth = 1;
+
             var best = byVendor
-                .OrderByDescending(e => e.Value.Count)
+                .OrderByDescending(e => e.Value.Count
+                                        + (e.Key.Territory == currentZone ? sameZoneWorth : 0))
                 .ThenBy(e => e.Key.Kind)                       // Gil vor Cosmic vor Scrip
                 .ThenByDescending(e => e.Key.PreferredScripHub) // unter Scrips: Idyllshire
                 .ThenByDescending(e => e.Key.Territory == currentZone)
@@ -76,6 +115,19 @@ internal sealed class Route(Configuration config, Restock restock, VendorIndex v
 
             plan.Add(new RouteStop(best.Key, best.Value.OrderBy(n => n).ToList()));
             currentZone = best.Key.Territory;
+
+            // Was dieser Halt kostet, steht dem naechsten nicht mehr zur
+            // Verfuegung.
+            foreach (var baitId in candidates[best.Key])
+            {
+                if (!best.Value.Contains(open[baitId]))
+                    continue;
+                if (PriceAt(best.Key, baitId) is not { } tag)
+                    continue;
+
+                var spent = (int)Math.Min(int.MaxValue, tag.TotalFor(missing.GetValueOrDefault(baitId)));
+                purse[tag.Currency] = Math.Max(0, Balance(tag.Currency) - spent);
+            }
 
             foreach (var baitId in open.Where(kv => best.Value.Contains(kv.Value)).Select(kv => kv.Key).ToList())
                 open.Remove(baitId);
@@ -87,10 +139,67 @@ internal sealed class Route(Configuration config, Restock restock, VendorIndex v
         // Was kein Haendler fuehrt, bleibt uebrig. Ist das Marktbrett erlaubt,
         // wird es der letzte Halt — zuletzt, weil es das einzige ist, was Gil zu
         // fremden Preisen kostet.
-        if (config.UseMarketBoard && open.Count > 0 && MarketBoards.Nearest(config, vendors) is { } board)
+        if (config.UseMarketBoard && open.Count > 0
+            && MarketBoards.Nearest(config, vendors, currentZone) is { } board)
             plan.Add(new RouteStop(board, open.Values.OrderBy(n => n).ToList(), true));
 
         return plan;
+    }
+
+    /// <summary>
+    /// Der Preis dieses Koeders in der Waehrung, die dieser Laden nimmt.
+    ///
+    /// Null heisst: unbekannt. Das ist keine Aussage ueber Bezahlbarkeit —
+    /// wer aus fehlendem Wissen "zu teuer" folgert, streicht Haendler, an
+    /// denen alles in Ordnung waere.
+    /// </summary>
+    private PriceTag? PriceAt(VendorIndex.Vendor vendor, uint baitId)
+    {
+        foreach (var text in vendors.PricesFor(baitId))
+            if (PriceTag.TryParse(text, out var tag) && tag.FitsVendor(vendor.Kind))
+                return tag;
+
+        return null;
+    }
+
+    /// <summary>
+    /// Welche dieser Koeder man an diesem Laden bezahlen kann.
+    ///
+    /// Koeder ohne bekannten Preis zaehlen mit: Sie sind der Regelfall bei
+    /// Gil-Haendlern, und sie auszuschliessen hiesse, wegen eines fehlenden
+    /// Datensatzes nicht hinzufahren.
+    /// </summary>
+    private List<uint> Affordable(VendorIndex.Vendor vendor, List<uint> baitIds, Dictionary<uint, int> missing,
+        Func<string, int> balance)
+    {
+        var unpriced = new List<uint>();
+        var priced = new Dictionary<string, List<Purse.Wanted>>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var baitId in baitIds)
+        {
+            if (PriceAt(vendor, baitId) is not { } tag)
+            {
+                unpriced.Add(baitId);
+                continue;
+            }
+
+            if (!priced.TryGetValue(tag.Currency, out var list))
+                priced[tag.Currency] = list = [];
+
+            list.Add(new Purse.Wanted(baitId, missing.GetValueOrDefault(baitId), tag));
+        }
+
+        var payable = new List<uint>(unpriced);
+
+        foreach (var (currency, wanted) in priced)
+        {
+            // Der groesste Bedarf zuerst — was am meisten fehlt, soll zuerst
+            // vom Vorrat bedient werden.
+            var ordered = wanted.OrderByDescending(w => w.Amount).ToList();
+            payable.AddRange(Purse.Payable(ordered, balance(currency)));
+        }
+
+        return payable;
     }
 
     public void Start()

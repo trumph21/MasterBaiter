@@ -313,7 +313,7 @@ internal sealed class VendorIndex
                 // Der Ladenpreis eines Gil-Haendlers steht am Item selbst.
                 var price = row.Item.ValueNullable?.PriceMid ?? 0;
                 if (price > 0)
-                    AddPrice(row.Item.RowId, $"{price} gil");
+                    AddPrice(row.Item.RowId, $"{price} Gil");
             }
 
         // SpecialShop-Zeile -> welche Koeder darin liegen. Der Scrip-Tausch
