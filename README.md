@@ -315,6 +315,37 @@ MIT — see [LICENSE](LICENSE).
 
 ## Changelog
 
+### 0.4.1
+
+**Baits sold for two currencies now show both.** Dragonfly costs 10 Cosmocredit
+at Cosmic Exploration and 5 Purple Gatherers' Scrip at the exchange. The shipped
+price table kept only the first entry it found on a page, so each of these baits
+had one of its two prices — and which one was down to the order of rows. Five
+baits were affected, and `Orange Gatherers' Scrip` was missing entirely as a
+result.
+
+**Hovering a price lists all of them**, with the vendor that takes each:
+
+    10 Cosmocredit  (Cosmic Exploration)
+    5 Purple Gatherers' Scrip  (scrip exchange)
+
+Until now that was only visible in the route preview, and the column showed
+whichever price happened to be found first.
+
+**Scrip names are shortened in the columns.** "3 Purple Gatherers' Scrip" fits
+in no reasonable width, and clipped it reads "3 Purple Gath". It shows as
+"3 Purple GS" — the colour stays because it tells the currencies apart — with
+the full name on hover.
+
+**A vendor who will not talk is approached from somewhere else.** One vendor in
+Tuliyollal has a stored spot from which the game refuses the conversation.
+Walking to the same spot again, which is what happened before, changes nothing.
+The plugin now walks to where the NPC actually stands rather than to the
+recorded point, and if that still fails it tries up to six positions around him.
+A refused conversation counts as a reason to move, not only being out of range.
+
+---
+
 ### 0.4.0
 
 **Bait you already own somewhere else now counts.** Until now only your bags

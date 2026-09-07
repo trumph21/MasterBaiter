@@ -50,27 +50,40 @@ async function findItemPage(name) {
 }
 
 /**
- * Liest den Waehrungspreis aus der Tabelle "Selling NPC".
+ * Liest die Waehrungspreise aus der Tabelle "Selling NPC".
  *
  * Gil-Laeden haben dort keine Preisspalte — ihr Preis steht am Item und ist
  * dem Plugin schon bekannt. Nur Sonderlaeden nennen Waehrung und Menge, und
  * genau die fehlen sonst.
+ *
+ * ALLE Zeilen, nicht nur die erste: Derselbe Koeder ist oft in zwei Waehrungen
+ * zu haben — Dragonfly kostet 10 Cosmocredit bei der Cosmic Exploration und 5
+ * Purple Gatherers' Scrip am Tausch. Wer nur den ersten Treffer nimmt, behaelt
+ * je Koeder einen zufaelligen der beiden und verliert den anderen lautlos.
+ *
+ * Je Waehrung zaehlt der erste Preis; mehrere Haendler mit derselben Waehrung
+ * verlangen dasselbe, das sind nur Wiederholungen.
  */
-function parsePrice(html) {
+function parsePrices(html) {
   const start = html.indexOf('Selling NPC');
-  if (start < 0) return null;
+  if (start < 0) return [];
 
   const end = html.indexOf('</table>', start);
   const table = html.slice(start, end < 0 ? undefined : end);
 
-  const rx = /<h4>([^<]+)<\/h4>\s*<span class="db-view__data__number">([\d,]+)<\/span>/;
-  const m = table.match(rx);
-  if (!m) return null;
+  const rx = /<h4>([^<]+)<\/h4>\s*<span class=\"db-view__data__number\">([\d,]+)<\/span>/g;
+  const found = new Map();
 
-  const amount = parseInt(m[2].replace(/,/g, ''), 10);
-  if (!Number.isFinite(amount) || amount <= 0) return null;
+  let m;
+  while ((m = rx.exec(table))) {
+    const amount = parseInt(m[2].replace(/,/g, ''), 10);
+    if (!Number.isFinite(amount) || amount <= 0) continue;
 
-  return { amount, currency: unescapeHtml(m[1]) };
+    const currency = unescapeHtml(m[1]);
+    if (!found.has(currency)) found.set(currency, amount);
+  }
+
+  return [...found].map(([currency, amount]) => ({ amount, currency }));
 }
 
 (async () => {
@@ -102,14 +115,16 @@ function parsePrice(html) {
       if (!page) { console.log(`${done}/${ids.length}  ${id}  ${name}: nicht gefunden`); continue; }
       await sleep(DELAY_MS);
 
-      const price = parsePrice(await get(`${LODESTONE}${page}/`));
-      if (price) {
-        result[String(id)] = { name, ...price };
-        found++;
-        console.log(`${done}/${ids.length}  ${id}  ${name}: ${price.amount} ${price.currency}`);
+      const prices = parsePrices(await get(`${LODESTONE}${page}/`));
+      if (prices.length > 0) {
+        result[String(id)] = { name, prices };
+        found += prices.length;
+        console.log(`${done}/${ids.length}  ${id}  ${name}: ` +
+          prices.map((p) => `${p.amount} ${p.currency}`).join('  |  '));
       } else {
         console.log(`${done}/${ids.length}  ${id}  ${name}: nur Gil oder kein Laden`);
       }
+
       await sleep(DELAY_MS);
     } catch (e) {
       console.log(`${done}/${ids.length}  ${id}  Fehler: ${e.message}`);

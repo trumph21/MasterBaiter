@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Text.RegularExpressions;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Windowing;
 
@@ -738,7 +739,7 @@ internal sealed class MainWindow : Window
                     {
                         var cost = price.TotalFor(row.Missing);
                         totals[price.Currency] = totals.GetValueOrDefault(price.Currency) + cost;
-                        Centered($"{cost:N0} {price.Currency}", Dim);
+                        Priced($"{cost:N0} {price.Currency}", Dim);
                     }
                     else
                     {
@@ -768,10 +769,18 @@ internal sealed class MainWindow : Window
 
         if (totals.Count > 0)
         {
+            var sums = totals.OrderByDescending(t => t.Value)
+                .Select(t => $"{t.Value:N0} {t.Key}")
+                .ToList();
+
             ImGui.SameLine();
-            ImGui.TextColored(Dim, "-  " + string.Join(", ", totals
-                .OrderByDescending(t => t.Value)
-                .Select(t => $"{t.Value:N0} {t.Key}")));
+            ImGui.TextColored(Dim, "-  " + string.Join(", ", sums.Select(Shorten)));
+
+            // Dieselbe Auskunft wie in der Kostenspalte: Wer "1.926 Purple GS"
+            // liest und nicht vorher eine Zeile darueber angefahren ist,
+            // erfaehrt sonst nirgends, wofuer das Kuerzel steht.
+            if (ImGui.IsItemHovered() && sums.Any(sum => Shorten(sum) != sum))
+                ImGui.SetTooltip(string.Join(Environment.NewLine, sums));
         }
 
         if (unknown > 0)
@@ -799,19 +808,84 @@ internal sealed class MainWindow : Window
     }
 
     /// <summary>
+    /// Bringt Scrip-Waehrungen auf ihr Kuerzel: "Purple Gatherers' Scrip" wird
+    /// zu "Purple GS", "Purple Crafters' Scrip" zu "Purple CS".
+    ///
+    /// Ausgeschrieben passt keine Scrip-Zeile in eine vertretbare Preisspalte,
+    /// und abgeschnitten steht dort "1 Purple Gath" — was nicht falsch ist,
+    /// aber auch nicht lesbar. Die Farbe bleibt deshalb stehen, sie haelt die
+    /// Tauschwaehrungen auseinander; nur der lange Rest wird zum Kuerzel.
+    ///
+    /// Absichtlich ein Muster statt einer Liste: Die Farben wechseln mit jeder
+    /// Erweiterung, die Bauform "Farbe Rolle Scrip" nicht. Das Apostroph
+    /// schreibt das Spiel mal als ' und mal als U+2019, beides muss passen.
+    /// </summary>
+    private static readonly Regex ScripName =
+        new(@"\b(Gatherers|Crafters)['’]?s? Scrip\b", RegexOptions.Compiled);
+
+    private static string Shorten(string text) =>
+        ScripName.Replace(text, m => $"{m.Groups[1].Value[0]}S");
+
+    /// <summary>
+    /// Alle bekannten Preise eines Koeders: der erste in der Spalte, saemtliche
+    /// im Hinweistext.
+    ///
+    /// Mancher Koeder ist in zwei Waehrungen zu haben — Dragonfly kostet
+    /// Cosmocredits bei der Cosmic Exploration und Scrips am Tausch. In der
+    /// Spalte steht nur einer davon, und welcher, haengt an der Fundreihenfolge.
+    /// Wer wissen will, ob sich der andere Weg lohnt, sah das bisher nur in der
+    /// Routenvorschau.
+    ///
+    /// Wo bekannt, steht dabei, wer die Waehrung nimmt: Ein Betrag ohne Laden
+    /// beantwortet die halbe Frage.
+    /// </summary>
+    private static void PricedAll(IReadOnlyList<string> prices, Vector4? colour)
+    {
+        var shown = Shorten(prices[0]);
+        var clipped = ImGui.CalcTextSize(shown).X > ImGui.GetContentRegionAvail().X;
+
+        Centered(shown, colour);
+
+        if (!ImGui.IsItemHovered())
+            return;
+
+        // Ein einzelner, ungekuerzter, vollstaendig sichtbarer Preis braucht
+        // keinen Hinweistext, der ihn wiederholt.
+        if (prices.Count == 1 && !clipped && shown == prices[0])
+            return;
+
+        ImGui.SetTooltip(string.Join(Environment.NewLine, prices.Select(WithVendor)));
+    }
+
+    /// <summary>Wer diese Waehrung annimmt, soweit es sich sagen laesst.</summary>
+    private static string WithVendor(string price)
+    {
+        if (!PriceTag.TryParse(price, out var tag))
+            return price;
+
+        var where = tag.FitsVendor(VendorIndex.VendorKind.GilShop) ? "gil shop"
+            : tag.FitsVendor(VendorIndex.VendorKind.ScripExchange) ? "scrip exchange"
+            : tag.FitsVendor(VendorIndex.VendorKind.Cosmic) ? "Cosmic Exploration"
+            : null;
+
+        return where == null ? price : $"{price}  ({where})";
+    }
+
+    /// <summary>
     /// Preis mittig, und beim Ueberfahren noch einmal ganz.
     ///
-    /// "1 Purple Gatherers' Scrip" ist laenger als jede vertretbare Spalte, und
-    /// abgeschnitten steht dort "1 Purple Gath" — was nicht falsch ist, aber
-    /// auch nicht lesbar. Der Hinweistext traegt den Rest nach.
+    /// Der Hinweistext traegt nach, was die Spalte nicht zeigt: den
+    /// ausgeschriebenen Waehrungsnamen ebenso wie einen trotzdem noch zu
+    /// langen Text.
     /// </summary>
     private static void Priced(string text, Vector4? colour)
     {
-        var clipped = ImGui.CalcTextSize(text).X > ImGui.GetContentRegionAvail().X;
+        var shown = Shorten(text);
+        var clipped = ImGui.CalcTextSize(shown).X > ImGui.GetContentRegionAvail().X;
 
-        Centered(text, colour);
+        Centered(shown, colour);
 
-        if (clipped && ImGui.IsItemHovered())
+        if ((clipped || shown != text) && ImGui.IsItemHovered())
             ImGui.SetTooltip(text);
     }
 
@@ -1068,8 +1142,8 @@ internal sealed class MainWindow : Window
                 Priced(row.Currency != 0
                     ? $"{row.Price} {Restock.ItemName(row.Currency)}"
                     : $"{row.Price} gil", null);
-            else if (_vendors.PriceFor(row.BaitId) is { } price)
-                Priced(price, Dim);
+            else if (_vendors.PricesFor(row.BaitId) is { Count: > 0 } prices)
+                PricedAll(prices, Dim);
             else if (_market.QuoteFor(row.BaitId) is { } quote)
             {
                 // Vom Marktbrett, nicht aus den Spieldaten: von einem Spieler

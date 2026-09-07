@@ -225,8 +225,11 @@ internal sealed class VendorIndex
         lock (_lock)
             all = _prices.TryGetValue(baitId, out var known) ? [.. known] : [];
 
-        if (_fallbackPrices.For(baitId) is { } extra && !all.Contains(extra))
-            all.Add(extra);
+        // Die mitgelieferten Preise hinten anhaengen, aber keinen doppelt: Was
+        // die Spieldaten schon nennen, gilt von dort.
+        foreach (var extra in _fallbackPrices.All(baitId))
+            if (!all.Contains(extra))
+                all.Add(extra);
 
         return all;
     }

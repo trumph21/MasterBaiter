@@ -18,6 +18,19 @@ internal sealed class Travel
     private enum Step { Idle, WaitingToTeleport, Teleporting, WaitingForZone, Aethernet, WaitingForDistrict, Pathfinding, Walking, Interacting, WaitingForShop, Done, Failed }
 
     private const float ArrivalRange = 3.5f;   // so nah wollen wir an den NPC
+
+    /// <summary>
+    /// Wie oft ein anderer Standpunkt vor demselben NPC versucht wird.
+    ///
+    /// Der hinterlegte Wegpunkt ist ein Punkt, kein Bereich, und manche taugen
+    /// nicht: In Tuliyollal endet der Weg an einer Stelle, von der aus sich der
+    /// Haendler nicht ansprechen laesst. Denselben Punkt erneut anzulaufen
+    /// aendert daran nichts — es muss ein anderer sein.
+    /// </summary>
+    private const int ApproachSpots = 6;
+
+    /// <summary>Wie weit die Ausweichpunkte um den NPC herum liegen.</summary>
+    private const float ApproachOffset = 2.5f;
     private const int ZoneTimeoutMs = 45_000;
 
     /// <summary>Abstand zwischen zwei Teleportversuchen.</summary>
@@ -49,6 +62,7 @@ internal sealed class Travel
     private long _deadline;
     private long _nextActionAt;
     private int _approachRetries;
+    private int _talkAttempts;
     private long _zoneSettledAt;
 
     /// <summary>Wird ausgeloest, sobald das Haendlerfenster offen ist.</summary>
@@ -144,6 +158,7 @@ internal sealed class Travel
 
         _target = vendor;
         _approachRetries = 0;
+        _talkAttempts = 0;
         _zoneSettledAt = 0;
         _doneWhen = null;
         _aethernetTries = 0;
@@ -356,7 +371,15 @@ internal sealed class Travel
                     return;
                 }
 
-                var destination = _target.World;
+                // Steht der NPC schon in der Objektliste, ist seine
+                // tatsaechliche Position besser als die hinterlegte: Die ist
+                // aufgeschrieben, teils mit geschaetzter Hoehe, und der NPC
+                // steht da, wo er steht.
+                var destination = LiveTargetPosition() ?? _target.World;
+
+                if (_approachRetries > 0)
+                    destination = OffsetSpot(destination, _approachRetries);
+
                 if (_target.ApproximateHeight)
                 {
                     // Die Datenbank kennt keine Hoehe. vnavmesh sucht den Boden.
@@ -422,16 +445,8 @@ internal sealed class Travel
 
                 if (!Interact())
                 {
-                    // Einmal nachlaufen, bevor aufgegeben wird. Der Pfad endet
-                    // gelegentlich ein Stueck vor dem Ziel.
-                    if (_approachRetries++ < 1)
-                    {
-                        Plugin.Log.Information($"[MasterBaiter] {_target.Npc} out of reach, walking closer.");
-                        Status = $"Getting closer to {_target.Npc}.";
-                        _step = Step.Pathfinding;
-                        _deadline = Environment.TickCount64 + WalkTimeoutMs;
+                    if (TryAnotherSpot("out of reach"))
                         return;
-                    }
 
                     Fail($"{_target.Npc} is not within reach.");
                     return;
@@ -498,6 +513,13 @@ internal sealed class Travel
                 // Sonst nochmal ansprechen, bis die Frist ablaeuft.
                 if (Environment.TickCount64 >= _nextActionAt)
                 {
+                    // Zweimal vergeblich angesprochen heisst nicht zwingend,
+                    // dass der NPC zu weit weg ist — das Spiel verweigert das
+                    // Gespraech auch bei verstelltem Blick. Dann hilft nur ein
+                    // anderer Standpunkt, nicht ein weiterer Versuch von hier.
+                    if (++_talkAttempts > 2 && TryAnotherSpot("no window opened"))
+                        return;
+
                     Plugin.Log.Information($"[MasterBaiter] No window opened at {_target.Npc}, talking again.");
                     _step = Step.Interacting;
                 }
@@ -524,6 +546,65 @@ internal sealed class Travel
     }
 
     /// <summary>Sucht den Haendler in der Objektliste und spricht ihn an.</summary>
+    /// <summary>
+    /// Sucht sich einen anderen Standpunkt vor demselben NPC.
+    ///
+    /// Gibt false zurueck, wenn alle durchprobiert sind — dann ist es kein
+    /// Standortproblem mehr und der Aufrufer soll aufgeben.
+    /// </summary>
+    private bool TryAnotherSpot(string why)
+    {
+        if (_approachRetries >= ApproachSpots)
+            return false;
+
+        _approachRetries++;
+        _talkAttempts = 0;
+
+        Plugin.Log.Information(
+            $"[MasterBaiter] {_target.Npc} {why}, trying approach {_approachRetries} of {ApproachSpots}.");
+        Status = _approachRetries == 1
+            ? $"Getting closer to {_target.Npc}."
+            : $"Trying another spot at {_target.Npc}.";
+
+        _step = Step.Pathfinding;
+        _deadline = Environment.TickCount64 + WalkTimeoutMs;
+        return true;
+    }
+
+    /// <summary>
+    /// Ein Punkt auf einem Kreis um das Ziel. Der erste Versuch laeuft den NPC
+    /// unmittelbar an, jeder weitere stellt sich woanders hin.
+    /// </summary>
+    private static Vector3 OffsetSpot(Vector3 centre, int attempt)
+    {
+        var angle = MathF.Tau * (attempt - 1) / ApproachSpots;
+        return centre with
+        {
+            X = centre.X + (MathF.Cos(angle) * ApproachOffset),
+            Z = centre.Z + (MathF.Sin(angle) * ApproachOffset),
+        };
+    }
+
+    /// <summary>Wo der Ziel-NPC gerade wirklich steht, falls er geladen ist.</summary>
+    private Vector3? LiveTargetPosition()
+    {
+        foreach (var obj in Plugin.ObjectTable)
+        {
+            if (obj.ObjectKind is not (Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventNpc
+                                       or Dalamud.Game.ClientState.Objects.Enums.ObjectKind.EventObj))
+                continue;
+
+            var matches = _target.DataId != 0
+                ? obj.BaseId == _target.DataId
+                : string.Equals(obj.Name.TextValue, _target.Npc, StringComparison.OrdinalIgnoreCase);
+
+            if (matches)
+                return obj.Position;
+        }
+
+        return null;
+    }
+
     private unsafe bool Interact()
     {
         var me = Plugin.ObjectTable.LocalPlayer;

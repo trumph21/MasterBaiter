@@ -1,117 +1,229 @@
 {
  "12710": {
   "name": "Fiend Worm",
-  "amount": 1,
-  "currency": "Purple Gatherers' Scrip"
+  "prices": [
+   {
+    "amount": 1,
+    "currency": "Purple Gatherers' Scrip"
+   }
+  ]
  },
  "12711": {
   "name": "Brute Leech",
-  "amount": 1,
-  "currency": "Purple Gatherers' Scrip"
+  "prices": [
+   {
+    "amount": 1,
+    "currency": "Purple Gatherers' Scrip"
+   }
+  ]
  },
  "12712": {
   "name": "Giant Crane Fly",
-  "amount": 1,
-  "currency": "Purple Gatherers' Scrip"
+  "prices": [
+   {
+    "amount": 1,
+    "currency": "Purple Gatherers' Scrip"
+   }
+  ]
  },
  "20618": {
   "name": "Bream Lure",
-  "amount": 15,
-  "currency": "Purple Gatherers' Scrip"
+  "prices": [
+   {
+    "amount": 15,
+    "currency": "Purple Gatherers' Scrip"
+   }
+  ]
  },
  "20619": {
   "name": "Suspending Minnow",
-  "amount": 15,
-  "currency": "Purple Gatherers' Scrip"
+  "prices": [
+   {
+    "amount": 15,
+    "currency": "Purple Gatherers' Scrip"
+   }
+  ]
  },
  "20675": {
   "name": "Stonefly Larva",
-  "amount": 1,
-  "currency": "Purple Gatherers' Scrip"
+  "prices": [
+   {
+    "amount": 1,
+    "currency": "Purple Gatherers' Scrip"
+   }
+  ]
  },
  "20676": {
   "name": "Blue Bobbit",
-  "amount": 1,
-  "currency": "Purple Gatherers' Scrip"
+  "prices": [
+   {
+    "amount": 1,
+    "currency": "Purple Gatherers' Scrip"
+   }
+  ]
  },
  "27586": {
   "name": "Jerked Ovim",
-  "amount": 1,
-  "currency": "Purple Gatherers' Scrip"
+  "prices": [
+   {
+    "amount": 1,
+    "currency": "Purple Gatherers' Scrip"
+   }
+  ]
  },
  "27587": {
   "name": "Robber Ball",
-  "amount": 1,
-  "currency": "Purple Gatherers' Scrip"
+  "prices": [
+   {
+    "amount": 1,
+    "currency": "Purple Gatherers' Scrip"
+   }
+  ]
  },
  "27588": {
   "name": "Short Bill Minnow",
-  "amount": 15,
-  "currency": "Purple Gatherers' Scrip"
+  "prices": [
+   {
+    "amount": 15,
+    "currency": "Purple Gatherers' Scrip"
+   }
+  ]
  },
  "27589": {
   "name": "Baitbugs",
-  "amount": 1,
-  "currency": "Purple Gatherers' Scrip"
+  "prices": [
+   {
+    "amount": 1,
+    "currency": "Purple Gatherers' Scrip"
+   }
+  ]
  },
  "27590": {
   "name": "Squid Strip",
-  "amount": 1,
-  "currency": "Purple Gatherers' Scrip"
+  "prices": [
+   {
+    "amount": 1,
+    "currency": "Purple Gatherers' Scrip"
+   }
+  ]
  },
  "36590": {
   "name": "Sky Spoon Lure",
-  "amount": 30,
-  "currency": "Purple Gatherers' Scrip"
+  "prices": [
+   {
+    "amount": 30,
+    "currency": "Purple Gatherers' Scrip"
+   }
+  ]
  },
  "36591": {
   "name": "Mayfly",
-  "amount": 3,
-  "currency": "Purple Gatherers' Scrip"
+  "prices": [
+   {
+    "amount": 3,
+    "currency": "Purple Gatherers' Scrip"
+   }
+  ]
  },
  "36593": {
   "name": "Mackerel Strip",
-  "amount": 3,
-  "currency": "Purple Gatherers' Scrip"
+  "prices": [
+   {
+    "amount": 3,
+    "currency": "Purple Gatherers' Scrip"
+   }
+  ]
  },
  "36595": {
   "name": "Chimera Worm",
-  "amount": 3,
-  "currency": "Purple Gatherers' Scrip"
+  "prices": [
+   {
+    "amount": 3,
+    "currency": "Purple Gatherers' Scrip"
+   }
+  ]
  },
  "36596": {
   "name": "Panic Jig",
-  "amount": 30,
-  "currency": "Purple Gatherers' Scrip"
+  "prices": [
+   {
+    "amount": 30,
+    "currency": "Purple Gatherers' Scrip"
+   }
+  ]
  },
  "38808": {
   "name": "Select Bait Ball",
-  "amount": 2,
-  "currency": "Purple Gatherers' Scrip"
+  "prices": [
+   {
+    "amount": 2,
+    "currency": "Purple Gatherers' Scrip"
+   }
+  ]
  },
  "43855": {
   "name": "Popper Lure",
-  "amount": 100,
-  "currency": "Cosmocredit"
+  "prices": [
+   {
+    "amount": 100,
+    "currency": "Cosmocredit"
+   },
+   {
+    "amount": 50,
+    "currency": "Purple Gatherers' Scrip"
+   }
+  ]
  },
  "43856": {
   "name": "Shucked Clam",
-  "amount": 10,
-  "currency": "Cosmocredit"
+  "prices": [
+   {
+    "amount": 10,
+    "currency": "Cosmocredit"
+   },
+   {
+    "amount": 5,
+    "currency": "Purple Gatherers' Scrip"
+   }
+  ]
  },
  "43857": {
   "name": "Dragonfly",
-  "amount": 10,
-  "currency": "Cosmocredit"
+  "prices": [
+   {
+    "amount": 10,
+    "currency": "Cosmocredit"
+   },
+   {
+    "amount": 5,
+    "currency": "Purple Gatherers' Scrip"
+   }
+  ]
  },
  "43858": {
   "name": "Red Maggots",
-  "amount": 10,
-  "currency": "Cosmocredit"
+  "prices": [
+   {
+    "amount": 10,
+    "currency": "Cosmocredit"
+   },
+   {
+    "amount": 5,
+    "currency": "Orange Gatherers' Scrip"
+   }
+  ]
  },
  "43859": {
   "name": "Ghost Nipper",
-  "amount": 10,
-  "currency": "Cosmocredit"
+  "prices": [
+   {
+    "amount": 10,
+    "currency": "Cosmocredit"
+   },
+   {
+    "amount": 5,
+    "currency": "Orange Gatherers' Scrip"
+   }
+  ]
  }
 }
