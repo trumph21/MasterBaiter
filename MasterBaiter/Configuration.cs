@@ -34,6 +34,22 @@ internal sealed class Configuration : IPluginConfiguration
     /// </summary>
     public bool HoneyTheme { get; set; } = true;
 
+    /// <summary>
+    /// Ein Reittier rufen, wenn der Weg lang genug ist und das Spiel es
+    /// zulaesst. In Staedten lehnt es ab, dort bleibt es beim Laufen.
+    /// </summary>
+    public bool UseMount { get; set; } = true;
+
+    /// <summary>
+    /// Fliegen, wo die Aetherstroeme des Gebiets gesammelt sind.
+    ///
+    /// Standardmaessig aus: Ein Flugweg endet in einem Gebiet ohne
+    /// Freischaltung damit, dass der Charakter unter seinem Ziel steht. Die
+    /// Pruefung darauf ist zuverlaessig, aber ungetestet — deshalb erst
+    /// einschalten, dann zusehen.
+    /// </summary>
+    public bool UseFlight { get; set; } = false;
+
     /// <summary>Nach der Reise von allein kaufen, sobald der Laden offen ist.</summary>
     public bool BuyOnArrival { get; set; } = true;
 

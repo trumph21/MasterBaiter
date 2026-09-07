@@ -35,8 +35,6 @@ internal sealed class Route(Configuration config, Restock restock, VendorIndex v
 
     public bool Running => _state != State.Idle;
     public string Status { get; private set; } = string.Empty;
-    public IReadOnlyList<RouteStop> Stops => _stops;
-    public int CurrentIndex => _index;
 
     /// <summary>Plant, ohne zu starten. Fuer die Vorschau im Fenster.</summary>
     public List<RouteStop> Plan()

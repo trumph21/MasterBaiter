@@ -31,6 +31,20 @@ internal sealed class Travel
 
     /// <summary>Wie weit die Ausweichpunkte um den NPC herum liegen.</summary>
     private const float ApproachOffset = 2.5f;
+
+    /// <summary>
+    /// So lange darf der Charakter beim Laufen auf der Stelle stehen, bevor er
+    /// als festhaengend gilt.
+    ///
+    /// vnavmesh rechnet den Weg einmal und laeuft ihn dann ab; ob dabei etwas
+    /// im Weg steht, merkt niemand. In Tuliyollal hat der Charakter so
+    /// sechsundachtzig Sekunden lang gegen eine Kiste gedrueckt — der Pfad galt
+    /// die ganze Zeit als "laeuft noch".
+    /// </summary>
+    private const int StuckMs = 5000;
+
+    /// <summary>Weniger Bewegung als das gilt als keine.</summary>
+    private const float StuckDistance = 0.7f;
     private const int ZoneTimeoutMs = 45_000;
 
     /// <summary>Abstand zwischen zwei Teleportversuchen.</summary>
@@ -63,13 +77,20 @@ internal sealed class Travel
     private long _nextActionAt;
     private int _approachRetries;
     private int _talkAttempts;
+    private Vector3 _lastPosition;
+    private long _movedAt;
+    private long _walkStartedAt;
     private long _zoneSettledAt;
 
     /// <summary>Wird ausgeloest, sobald das Haendlerfenster offen ist.</summary>
     public event Action? Arrived;
 
-    public Travel()
+    private readonly Configuration _config;
+
+    public Travel(Configuration config)
     {
+        _config = config;
+
         var pi = Plugin.PluginInterface;
         _navReady = pi.GetIpcSubscriber<bool>("vnavmesh.Nav.IsReady");
         _navMoveCloseTo = pi.GetIpcSubscriber<Vector3, bool, float, bool>("vnavmesh.SimpleMove.PathfindAndMoveCloseTo");
@@ -85,6 +106,23 @@ internal sealed class Travel
     }
 
     public bool Running => _step is not (Step.Idle or Step.Done or Step.Failed);
+
+    /// <summary>
+    /// Wie weit es noch bis zum Ziel ist, solange eine Reise laeuft und der
+    /// Charakter im richtigen Gebiet steht. Sonst null — ueber Gebietsgrenzen
+    /// hinweg ist eine Entfernung keine Aussage.
+    /// </summary>
+    public float? DistanceToTarget
+    {
+        get
+        {
+            if (!Running || Plugin.ClientState.TerritoryType != _target.Territory)
+                return null;
+
+            var me = Plugin.ObjectTable.LocalPlayer;
+            return me == null ? null : Vector3.Distance(me.Position, _target.World);
+        }
+    }
     public string Status { get; private set; } = string.Empty;
     public VendorIndex.Vendor Target => _target;
 
@@ -392,8 +430,12 @@ internal sealed class Travel
                     catch { /* dann eben ohne */ }
                 }
 
+                // Fliegen nur, wo es freigeschaltet ist — sonst plant vnavmesh
+                // einen Weg durch die Luft, den der Charakter nicht nehmen kann.
+                var fly = _config.UseFlight && _config.UseMount && Flight.AllowedHere;
+
                 bool started;
-                try { started = _navMoveCloseTo.InvokeFunc(destination, false, ArrivalRange); }
+                try { started = _navMoveCloseTo.InvokeFunc(destination, fly, ArrivalRange); }
                 catch (Exception ex) { Fail($"vnavmesh not available: {ex.Message}"); return; }
 
                 if (!started)
@@ -403,6 +445,8 @@ internal sealed class Travel
                 }
 
                 _step = Step.Walking;
+                _walkStartedAt = Environment.TickCount64;
+                MarkMoved();
                 // vnavmesh rechnet den Pfad nebenlaeufig. Ohne diese Schonfrist
                 // gilt der Weg als beendet, bevor er ueberhaupt begonnen hat.
                 _nextActionAt = Pacing.Next(1100);
@@ -426,7 +470,28 @@ internal sealed class Travel
                 catch { Fail("vnavmesh stopped responding."); return; }
 
                 if (running)
+                {
+                    if (!Stuck())
+                        return;
+
+                    // Der Weg laeuft, der Charakter nicht. Weiterzuwarten
+                    // heisst, gegen dasselbe Hindernis zu druecken, bis die
+                    // Frist ablaeuft.
+                    try { _navStop.InvokeAction(); } catch { /* dann eben nicht */ }
+
+                    if (TryAnotherSpot("stuck on the way"))
+                        return;
+
+                    Fail($"Stuck on the way to {_target.Npc}.");
                     return;
+                }
+
+                // Die Dauer mitschreiben: Ein Weg, der aus dem Ruder laeuft,
+                // sieht im Protokoll sonst genauso aus wie ein kurzer.
+                Plugin.Log.Information(
+                    $"[MasterBaiter] Walked to {_target.Npc} in " +
+                    $"{(Environment.TickCount64 - _walkStartedAt) / 1000.0:0.0} s.");
+
                 Status = $"Talking to {_target.Npc}.";
                 _step = Step.Interacting;
                 _nextActionAt = Pacing.Next(600);
@@ -546,6 +611,34 @@ internal sealed class Travel
     }
 
     /// <summary>Sucht den Haendler in der Objektliste und spricht ihn an.</summary>
+    /// <summary>Merkt sich, dass der Charakter gerade noch vorangekommen ist.</summary>
+    private void MarkMoved()
+    {
+        _lastPosition = Plugin.ObjectTable.LocalPlayer?.Position ?? Vector3.Zero;
+        _movedAt = Environment.TickCount64;
+    }
+
+    /// <summary>
+    /// Steht der Charakter, obwohl er laufen sollte?
+    ///
+    /// Gemessen wird die Strecke, nicht die Geschwindigkeit: Ein Zwischenbild
+    /// im Stillstand ist normal, fuenf Sekunden ohne einen Meter nicht.
+    /// </summary>
+    private bool Stuck()
+    {
+        var me = Plugin.ObjectTable.LocalPlayer;
+        if (me == null)
+            return false;
+
+        if (Vector3.Distance(me.Position, _lastPosition) > StuckDistance)
+        {
+            MarkMoved();
+            return false;
+        }
+
+        return Environment.TickCount64 - _movedAt > StuckMs;
+    }
+
     /// <summary>
     /// Sucht sich einen anderen Standpunkt vor demselben NPC.
     ///

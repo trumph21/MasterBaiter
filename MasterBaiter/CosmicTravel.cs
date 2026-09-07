@@ -491,9 +491,6 @@ internal sealed class CosmicTravel(Configuration config, Travel travel, VendorIn
         }
     }
 
-    /// <summary>Wartet der Durchlauf gerade auf einen Klick des Spielers?</summary>
-    public bool WaitingForClick => _step == Step.Planet && !config.AutoSelectPlanet;
-
     private void Arrived()
     {
         _step = Step.Idle;

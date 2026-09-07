@@ -1,4 +1,3 @@
-using System.Linq;
 using System.Reflection;
 using Newtonsoft.Json;
 
@@ -42,13 +41,6 @@ internal sealed class BaitTable
 
     /// <summary>Alle Koeder, die in der Tabelle vorkommen.</summary>
     public IReadOnlyCollection<uint> AllBaitIds => _fish.Values.Select(e => (uint)e.Bait).Distinct().ToList();
-
-    public bool IsFish(uint itemId) => _fish.ContainsKey(itemId);
-
-    /// <summary>Startkoeder eines Fisches, oder null wenn das Item kein bekannter Fisch ist.</summary>
-    public uint? BaitFor(uint itemId) => _fish.TryGetValue(itemId, out var e) ? e.Bait : null;
-
-    public string FishName(uint itemId) => _fish.TryGetValue(itemId, out var e) ? e.Name : string.Empty;
 
     /// <summary>Alle Koeder, die fuer die uebergebenen Items gebraucht werden, mit den zugehoerigen Fischen.</summary>
     public Dictionary<uint, List<uint>> BaitsFor(IEnumerable<uint> itemIds)

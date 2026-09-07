@@ -42,7 +42,6 @@ internal sealed class PurchaseQueue(Configuration config)
 
     public bool Running { get; private set; }
     public string Status { get; private set; } = string.Empty;
-    public int Remaining => _jobs.Count;
     public int Bought { get; private set; }
     public int Skipped { get; private set; }
     private int _totalItems;

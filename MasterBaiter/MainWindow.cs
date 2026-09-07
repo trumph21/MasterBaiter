@@ -472,6 +472,40 @@ internal sealed class MainWindow : Window
                              "travelling." + Environment.NewLine +
                              "Not while you are playing yourself, in combat or mounted.");
 
+        var useMount = _config.UseMount;
+        if (ImGui.Checkbox("Use a mount", ref useMount))
+        {
+            _config.UseMount = useMount;
+            _config.Save();
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(
+                "Calls a mount when the way is long enough to be worth the two seconds it takes." +
+                Environment.NewLine +
+                "Whether mounting is allowed here is the game's answer, not a list of mine: " +
+                "in cities" + Environment.NewLine +
+                "and instances it refuses, and then the character walks.");
+
+        using (ImRaiiDisabled(!_config.UseMount))
+        {
+            var useFlight = _config.UseFlight;
+            if (ImGui.Checkbox("Fly where you can", ref useFlight))
+            {
+                _config.UseFlight = useFlight;
+                _config.Save();
+            }
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(
+                "Flies in zones whose aether currents you have collected, which makes the route " +
+                "a line" + Environment.NewLine +
+                "instead of a walk around the scenery. Everywhere else it stays on the ground." +
+                Environment.NewLine +
+                "Needs a mount, so it follows the switch above." + Environment.NewLine +
+                "Off by default: the check is sound but untested, and a flight path in a zone " +
+                "you cannot" + Environment.NewLine +
+                "fly in ends with the character standing underneath its destination.");
+
         var helpers = _travel.MissingHelpers();
         ImGui.TextDisabled(helpers.Count == 0
             ? "vnavmesh and Lifestream are both present."

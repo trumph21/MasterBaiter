@@ -79,7 +79,7 @@ public sealed class Plugin : IDalamudPlugin
         _queue = new PurchaseQueue(_config);
         _sweep = new ScripSweep(_config, restock, _queue, vendors);
         _market = new MarketBoard(_config, restock);
-        _travel = new Travel();
+        _travel = new Travel(_config);
         _cosmic = new CosmicTravel(_config, _travel, vendors);
 
         // Reach beantwortet die Frage nach der Erreichbarkeit fuer alle
@@ -173,6 +173,7 @@ public sealed class Plugin : IDalamudPlugin
         CheckHelpers();
         _cosmic.Tick();
         Sprint.Tick(_config, _travel, _route, _cosmic);
+        Mount.Tick(_config, _travel, _route, _cosmic);
         Teleportable.Tick();
         _restock.SaddlebagTick();
 

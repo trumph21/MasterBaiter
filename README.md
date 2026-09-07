@@ -315,6 +315,34 @@ MIT — see [LICENSE](LICENSE).
 
 ## Changelog
 
+### 0.4.2
+
+**A mount, and flight where you have it.** Two switches under Options → Travel.
+Whether mounting is allowed here is the game's own answer, not a list kept in
+the plugin, so cities and instances refuse it and the character walks. Mounting
+only starts when at least 60 yalms are left — sitting up costs about two
+seconds, which is a loss over twenty yalms and a gain over two hundred.
+
+Flight is off by default and needs the mount switch, because flying without a
+mount is not a thing. It applies only in zones whose aether currents you have
+collected; the check reads that from the game, and a zone with no aether current
+group at all — every city — is excluded by that alone.
+
+**A character who stops moving is noticed.** vnavmesh computes a path once and
+then follows it; nobody checks whether something is in the way. In Tuliyollal
+that meant 86 seconds pressed against a crate, with the path reporting "still
+running" the whole time. Five seconds without a yalm of progress now throws the
+path away and tries another way in — and the log records how long each walk
+took, so a walk that goes wrong no longer looks like a short one.
+
+**Dead code removed.** `BuyMissing` was the buying path from before the
+purchase queue existed: it bypassed the currency, space and index checks that
+every purchase goes through now, and nothing called it. Nine smaller members
+went the same way, along with two unnecessary `using` directives. Nothing
+changed in behaviour; there is simply less of it.
+
+---
+
 ### 0.4.1
 
 **Baits sold for two currencies now show both.** Dragonfly costs 10 Cosmocredit

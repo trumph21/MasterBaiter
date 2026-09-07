@@ -85,10 +85,6 @@ internal sealed class PriceFallback
             $"[MasterBaiter] {total} fallback prices for {_prices.Count} baits loaded.");
     }
 
-    /// <summary>Der erste bekannte Preis, fuer die eine Zahl in der Spalte.</summary>
-    public string? For(uint baitId) =>
-        _prices.TryGetValue(baitId, out var list) && list.Count > 0 ? list[0] : null;
-
     /// <summary>Alle bekannten Preise dieses Koeders.</summary>
     public IReadOnlyList<string> All(uint baitId) =>
         _prices.TryGetValue(baitId, out var list) ? list : [];

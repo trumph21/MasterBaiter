@@ -1,5 +1,4 @@
 using System.Globalization;
-using Lumina.Excel;
 using System.Numerics;
 using Lumina.Excel.Sheets;
 
@@ -197,22 +196,6 @@ internal sealed class VendorIndex
     {
         lock (_lock)
             return _otherSources.TryGetValue(baitId, out var v) ? v : [];
-    }
-
-    /// <summary>
-    /// Was der Koeder kostet, in Gil oder der jeweiligen Waehrung.
-    ///
-    /// Die Spieldaten gehen vor. Erst wenn sie nichts hergeben — bei
-    /// Scrip-Koedern der Regelfall — kommt der mitgelieferte Wert aus der
-    /// Eorzea-Datenbank zum Zug.
-    /// </summary>
-    public string? PriceFor(uint baitId)
-    {
-        lock (_lock)
-            if (_prices.TryGetValue(baitId, out var known) && known.Count > 0)
-                return known[0];
-
-        return _fallbackPrices.For(baitId);
     }
 
     /// <summary>

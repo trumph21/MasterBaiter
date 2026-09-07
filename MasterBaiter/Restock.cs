@@ -154,14 +154,11 @@ internal sealed class Restock(Configuration config, BaitTable baits, GatherList 
     /// <summary>
     /// Was davon in der Satteltasche liegt, nach dem letzten Blick.
     ///
-    /// <paramref name="known"/> ist falsch, bis die Tasche einmal offen war.
-    /// Bis dahin ist die Null keine Aussage und darf nicht als eine gelten.
+    /// Ob ueberhaupt schon einmal hineingesehen wurde, beantwortet
+    /// <see cref="SaddlebagRead"/> — bis dahin ist die Null keine Aussage und
+    /// darf nicht als eine gelten.
     /// </summary>
-    public int CountInSaddlebag(uint itemId, out bool known)
-    {
-        known = SaddlebagRead;
-        return config.Saddlebag.GetValueOrDefault(itemId);
-    }
+    public int CountInSaddlebag(uint itemId) => config.Saddlebag.GetValueOrDefault(itemId);
 
     /// <summary>Die vier Beutel, die das Spiel als Inventar fuehrt.</summary>
     private static readonly InventoryType[] Bags =
@@ -241,7 +238,7 @@ internal sealed class Restock(Configuration config, BaitTable baits, GatherList 
                 BaitId = baitId,
                 Name = ItemName(baitId),
                 Bag = CountInInventory(baitId),
-                Saddle = config.CountSaddlebag ? CountInSaddlebag(baitId, out _) : 0,
+                Saddle = config.CountSaddlebag ? CountInSaddlebag(baitId) : 0,
                 SaddleKnown = config.CountSaddlebag && SaddlebagRead,
                 SaddleSeen = config.SaddlebagSeen,
                 Retainer = config.CountRetainers ? retainers.CountFor(baitId) : 0,
@@ -268,7 +265,7 @@ internal sealed class Restock(Configuration config, BaitTable baits, GatherList 
                     BaitId = baitId,
                     Name = ItemName(baitId),
                     Bag = CountInInventory(baitId),
-                Saddle = config.CountSaddlebag ? CountInSaddlebag(baitId, out _) : 0,
+                Saddle = config.CountSaddlebag ? CountInSaddlebag(baitId) : 0,
                 SaddleKnown = config.CountSaddlebag && SaddlebagRead,
                 SaddleSeen = config.SaddlebagSeen,
                 Retainer = config.CountRetainers ? retainers.CountFor(baitId) : 0,
@@ -305,7 +302,7 @@ internal sealed class Restock(Configuration config, BaitTable baits, GatherList 
         foreach (var r in Rows)
         {
             r.Bag = CountInInventory(r.BaitId);
-            r.Saddle = config.CountSaddlebag ? CountInSaddlebag(r.BaitId, out _) : 0;
+            r.Saddle = config.CountSaddlebag ? CountInSaddlebag(r.BaitId) : 0;
             r.SaddleKnown = config.CountSaddlebag && SaddlebagRead;
             r.SaddleSeen = config.SaddlebagSeen;
             r.Retainer = config.CountRetainers ? retainers.CountFor(r.BaitId) : 0;
@@ -338,28 +335,5 @@ internal sealed class Restock(Configuration config, BaitTable baits, GatherList 
                 break;
             }
         }
-    }
-
-    /// <summary>Kauft alle fehlenden Koeder, die der offene Haendler fuehrt. Gibt die Anzahl der ausgeloesten Kaeufe zurueck.</summary>
-    public int BuyMissing()
-    {
-        AnnotateShop();
-        var bought = 0;
-        foreach (var r in Rows)
-        {
-            if (r.Ignored || !r.InShop || r.Missing <= 0)
-                continue;
-
-            if (!ShopWindowReader.Buy(r.ShopIndex, r.Missing))
-                continue;
-
-            Plugin.Log.Information($"[MasterBaiter] {r.Missing}x {r.Name} gekauft (Index {r.ShopIndex}).");
-            bought++;
-        }
-
-        if (bought > 0)
-            Refresh();
-
-        return bought;
     }
 }
