@@ -87,15 +87,24 @@ execFileSync("powershell.exe", [
 // naechste Mal erzeugt und hochgeladen wird.
 function downloadCount(previous) {
   try {
+    // Geblaettert und je Anhang eine Zeile, statt einer fertigen Summe:
+    // Ohne --paginate liefert die Schnittstelle nur die ersten dreissig
+    // Releases, und der Zaehler unterschluege ab dem einunddreissigsten
+    // stillschweigend die aeltesten. Mit --paginate wertet gh das --jq je
+    // Seite aus, eine Summe je Seite waere also auch falsch — deshalb wird
+    // hier addiert.
     const out = execFileSync(
       "gh",
-      ["api", "repos/trumph21/MasterBaiter/releases",
-       "--jq", "[.[].assets[].download_count] | add // 0"],
+      ["api", "--paginate", "repos/trumph21/MasterBaiter/releases",
+       "--jq", ".[].assets[].download_count"],
       { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
 
-    const count = parseInt(out.trim(), 10);
-    if (Number.isFinite(count) && count >= 0)
-      return count;
+    const numbers = out.split(/\r?\n/)
+      .map((line) => parseInt(line.trim(), 10))
+      .filter((n) => Number.isFinite(n) && n >= 0);
+
+    if (numbers.length > 0)
+      return numbers.reduce((sum, n) => sum + n, 0);
   } catch {
     // Kein gh, kein Netz, kein Zugriff — dann die alte Zahl behalten.
   }
