@@ -28,8 +28,21 @@ internal sealed class MainWindow : Window
     // Sekunde reicht, wie bei der Routenplanung.
     private List<Purse.Holding> _purse = [];
     private long _purseAt;
+
+    // Beide Gruende gehen ueber alle Inventarfaecher. Je Bild waere das
+    // dieselbe Rechnung sechzigmal je Sekunde, fuer einen Satz, der sich in
+    // dieser Zeit nicht aendert.
+    private string? _saddleFetch;
+    private string? _saddleStow;
+    private string? _retainerFetch;
+    private string? _retainerStow;
+    private long _blockersAt;
+    private int _retainerRow;
     private readonly VendorIndex _vendors;
     private readonly RetainerStock _retainers;
+    private readonly StashTransfer _stash;
+    private readonly RetainerVisit _visit;
+    private readonly RetainerRun _retainerRun;
     private readonly Travel _travel;
     private readonly Route _route;
     // Welche Zeile gerade ihr Ziel bearbeitet. 0 heisst: keine.
@@ -48,7 +61,7 @@ internal sealed class MainWindow : Window
     private DateTime _messageUntil;
     private bool _wasRunning;
 
-    public MainWindow(Configuration config, Restock restock, PurchaseQueue queue, ScripSweep sweep, MarketBoard market, CosmicTravel cosmic, VendorIndex vendors, Travel travel, Route route, RetainerStock retainers)
+    public MainWindow(Configuration config, Restock restock, PurchaseQueue queue, ScripSweep sweep, MarketBoard market, CosmicTravel cosmic, VendorIndex vendors, Travel travel, Route route, RetainerStock retainers, StashTransfer stash, RetainerVisit visit, RetainerRun retainerRun)
         : base($"MasterBaiter {VersionText}###MasterBaiterMain")
     {
         _config = config;
@@ -59,6 +72,9 @@ internal sealed class MainWindow : Window
         _cosmic = cosmic;
         _vendors = vendors;
         _retainers = retainers;
+        _stash = stash;
+        _visit = visit;
+        _retainerRun = retainerRun;
         _travel = travel;
         _route = route;
         Size = new Vector2(620, 480);
@@ -221,8 +237,10 @@ internal sealed class MainWindow : Window
                 if (ImGui.Button("Preview"))
                     _openPreview = true;
             }
-            if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("Every stop with what it buys and what it costs, before anything moves.");
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+                ImGui.SetTooltip(plan.Count == 0
+                    ? "Nothing to plan: no bait is missing that a vendor you can reach and pay could supply."
+                    : "Every stop with what it buys and what it costs, before anything moves.");
         }
 
         if (_travel.Running && !_route.Running)
@@ -230,6 +248,39 @@ internal sealed class MainWindow : Window
             ImGui.SameLine();
             if (ImGui.Button("Stop travel"))
                 _travel.Stop("Travel stopped.");
+        }
+
+        // Immer sichtbar, notfalls ausgegraut mit Begruendung: Ein fehlender
+        // Knopf sagt nicht, ob nichts zu tun ist oder etwas nicht geht.
+        RefreshBlockers();
+
+        // Ein Knopf fuer den ganzen Gang. Die vier Einzelschritte stehen im
+        // Debug-Reiter — wer einen davon pruefen will, findet sie dort, aber
+        // die Leiste bleibt lesbar.
+        var runBlocker = _retainerRun.Running ? null : _retainerRun.Blocker();
+
+        ImGui.SameLine();
+        if (_retainerRun.Running)
+        {
+            if (ImGui.Button("Stop sorting"))
+                _retainerRun.Stop("Stopped.");
+        }
+        else
+        {
+            using (ImRaiiDisabled(runBlocker != null || _stash.Running || _visit.Running))
+            {
+                if (ImGui.Button("Sort Bait Storage"))
+                    _retainerRun.Start();
+            }
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+                ImGui.SetTooltip(runBlocker ??
+                    "Goes through every place your bait sits:" + Environment.NewLine +
+                    "the saddlebag first, since it opens anywhere, then a summoning bell and each " +
+                    "retainer." + Environment.NewLine +
+                    "At each one: fetch what your bags are short of, put away what no fish needs " +
+                    "any more." + Environment.NewLine +
+                    "Retainers left over from a shrunk subscription are skipped without shifting " +
+                    "the rest.");
         }
 
         ImGui.SameLine();
@@ -309,12 +360,16 @@ internal sealed class MainWindow : Window
             if (!ImGui.IsItemHovered())
                 continue;
 
-            ImGui.SetTooltip($"{holding.Amount:N0} {holding.Currency}" + Environment.NewLine +
+            // Nur der Sonderfall braucht einen Satz. "Readable here" stand
+            // unter jeder der vier Waehrungen und sagte nichts, was die weisse
+            // Zahl nicht schon sagt.
+            ImGui.SetTooltip($"{holding.Amount:N0} {holding.Currency}" +
                 (holding.Live
-                    ? "Readable here."
-                    : holding.Seen is { } when
-                        ? $"Not readable here — remembered from {Ago(when)}."
-                        : "Not readable here."));
+                    ? string.Empty
+                    : Environment.NewLine +
+                      (holding.Seen is { } when
+                          ? $"Not readable here — remembered from {Ago(when)}."
+                          : "Not readable here.")));
         }
     }
 
@@ -366,6 +421,60 @@ internal sealed class MainWindow : Window
         return _purse;
     }
 
+    private void RefreshBlockers()
+    {
+        var now = Environment.TickCount64;
+        if (now < _blockersAt)
+            return;
+
+        _blockersAt = now + 1000;
+        _saddleFetch = _stash.Blocker(_restock.Rows, Stash.Saddlebag);
+        _saddleStow = _stash.StowBlocker(_restock, Stash.Saddlebag);
+        _retainerFetch = _stash.Blocker(_restock.Rows, Stash.Retainer);
+        _retainerStow = _stash.StowBlocker(_restock, Stash.Retainer);
+    }
+
+    /// <summary>
+    /// Die beiden Knoepfe eines Lagers.
+    ///
+    /// Satteltasche und Gehilfe bekommen dieselben zwei, weil sie dasselbe tun.
+    /// Der Unterschied steht im Hinweistext, wenn es einen gibt — etwa, dass
+    /// ein Gehilfe nur an der Rufglocke aufgeht.
+    /// </summary>
+    private void StashButtons(Stash stash, string? fetchBlocker, string? stowBlocker)
+    {
+        var busy = _stash.Running;
+
+        ImGui.SameLine();
+        using (ImRaiiDisabled(busy || fetchBlocker != null))
+        {
+            if (ImGui.Button($"Withdraw Bait from {stash.Name}"))
+                _stash.Start(_restock, stash);
+        }
+        // Auch im ausgegrauten Zustand: Gerade dann steht im Hinweistext,
+        // warum der Knopf nicht geht — und gerade dann fragt man danach.
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip(fetchBlocker ??
+                $"Moves bait you are missing out of the {stash.Name.ToLowerInvariant()} and into " +
+                "your bags." + Environment.NewLine +
+                "Whole stacks only: the game moves stacks, not amounts, so one larger than the " +
+                "gap stays" + Environment.NewLine +
+                "unless your bags hold none of it at all.");
+
+        ImGui.SameLine();
+        using (ImRaiiDisabled(busy || stowBlocker != null))
+        {
+            if (ImGui.Button($"Deposit Bait in {stash.Name}"))
+                _stash.StartStow(_restock, stash);
+        }
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip(stowBlocker ??
+                "Puts away bait that no fish on your list needs any more." + Environment.NewLine +
+                "Having more than the target is not a reason: that surplus is yours to keep at " +
+                "hand." + Environment.NewLine +
+                "Whole stacks only, and never one that would drop you below the target.");
+    }
+
     /// <summary>Was gerade laeuft, in der Reihenfolge der Dringlichkeit.</summary>
     private string CurrentStatus()
     {
@@ -373,6 +482,12 @@ internal sealed class MainWindow : Window
             return _sweep.Status;
         if (_market.Running && _market.Status.Length > 0)
             return _market.Status;
+        if (_retainerRun.Running && _retainerRun.Status.Length > 0)
+            return _retainerRun.Status;
+        if (_visit.Running && _visit.Status.Length > 0)
+            return _visit.Status;
+        if (_stash.Running && _stash.Status.Length > 0)
+            return _stash.Status;
         if (_queue.Status.Length > 0)
             return _queue.Status;
         if (_route.Running && _route.Status.Length > 0)
@@ -765,6 +880,77 @@ internal sealed class MainWindow : Window
             ImGui.SetTooltip("List every visible game window with its raw values. " +
                              "Useful when something is not recognised.");
 
+        // Schritt eins der Gehilfen-Kette, allein pruefbar: Es bewegt nichts,
+        // es faehrt nur hin und spricht die Glocke an. Was danach kommt —
+        // Gehilfen auswaehlen, Inventar oeffnen, uebertragen — kommt erst,
+        // wenn dieser Teil verlaesslich ist.
+        var bell = SummoningBells.Nearest(_config, _vendors);
+
+        using (ImRaiiDisabled(bell == null || _travel.Running || !_travel.Available))
+        {
+            if (ImGui.Button("Go to summoning bell") && bell is { } destination)
+                _travel.Start(destination);
+        }
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip(bell is { } known
+                ? $"Teleport to {known.AetheryteName} and walk to the summoning bell in {known.Zone}."
+                : "No summoning bell known yet." + Environment.NewLine +
+                  "There is no shipped table for them: a guessed position walks the character into " +
+                  "a wall." + Environment.NewLine +
+                  "Walk past one once and it is remembered — every city you visit adds another.");
+
+        // Die vier Einzelschritte, aus der Aktionsleiste hierher gezogen: Sie
+        // sind zum Pruefen da, nicht zum taeglichen Gebrauch. Dafuer gibt es
+        // "Sort Bait Storage".
+        StashButtons(Stash.Saddlebag, _saddleFetch, _saddleStow);
+        StashButtons(Stash.Retainer, _retainerFetch, _retainerStow);
+
+        // Teil zwei der Kette, einzeln pruefbar: eine Zeile anwaehlen und
+        // sehen, ob die richtige aufgeht. Die Zahl ist einstellbar, weil ein
+        // einzelner Mitschnitt nicht verraet, ob "param 1" die erste Zeile mit
+        // Versatz oder die zweite von null gezaehlt ist.
+        using (ImRaiiDisabled(!RetainerList.IsOpen))
+        {
+            ImGui.SetNextItemWidth(70);
+            ImGui.InputInt("##retainerrow", ref _retainerRow);
+            _retainerRow = Math.Clamp(_retainerRow, 0, 9);
+
+            ImGui.SameLine();
+            if (ImGui.Button("Open retainer"))
+                _visit.Start(_retainerRow);
+        }
+
+        ImGui.SameLine();
+        using (ImRaiiDisabled(!Stash.Retainer.Ready && !TopicSelect.IsOpen))
+        {
+            if (ImGui.Button("Leave retainer"))
+                _visit.Leave();
+        }
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip("Closes the inventory, picks Quit, clicks through the farewell and " +
+                             "ends back at the list." + Environment.NewLine +
+                             "The way out is the way in, backwards.");
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip(RetainerList.IsOpen
+                ? "Selects that row of the open retainer list, counting from zero." +
+                  Environment.NewLine +
+                  "Try 0 and 1 and note which retainer opens — that settles how the parameter " +
+                  "is counted."
+                : "No retainer list open. Use a summoning bell first.");
+
+        ImGui.SameLine();
+        if (ImGui.Button(RetainerRecorder.Listening ? "Stop recording" : "Record retainer windows"))
+            RetainerRecorder.Toggle();
+
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(
+                "Writes down what a real click on the retainer windows looks like: which window," +
+                Environment.NewLine +
+                "which event, which parameter." + Environment.NewLine +
+                "Switch it on, open a bell, pick a retainer, choose the item menu, switch it off." +
+                Environment.NewLine +
+                "Guessing these has already cost this plugin two wrong answers and one lucky one.");
+
         ImGui.SameLine();
         if (ImGui.Button("Explain route"))
         {
@@ -815,6 +1001,7 @@ internal sealed class MainWindow : Window
             ? $"{Tackle.LureCount} lures known, {_vendors.VendorCount} vendor entries, " +
               $"{Teleportable.Count} teleport destinations, " +
               $"{_retainers.Coverage().Seen} of {_retainers.Coverage().Total} retainers counted, " +
+              $"{SummoningBells.KnownCount(_config)} summoning bell(s) known, " +
               (_restock.SaddlebagRead ? "saddlebag counted." : "saddlebag not counted yet.")
             : "Building the vendor index...");
     }
@@ -1315,8 +1502,9 @@ internal sealed class MainWindow : Window
         {
             1 => (a, b) => a.Fish.Count.CompareTo(b.Fish.Count),
             2 => (a, b) => a.Have.CompareTo(b.Have),
-            3 => (a, b) => a.Target.CompareTo(b.Target),
-            4 => (a, b) => a.Missing.CompareTo(b.Missing),
+            3 => (a, b) => a.Bag.CompareTo(b.Bag),
+            4 => (a, b) => a.Target.CompareTo(b.Target),
+            5 => (a, b) => a.Missing.CompareTo(b.Missing),
             _ => (a, b) => string.Compare(a.Name, b.Name, StringComparison.CurrentCultureIgnoreCase),
         };
 
@@ -1343,7 +1531,7 @@ internal sealed class MainWindow : Window
                                       | ImGuiTableFlags.ScrollY | ImGuiTableFlags.SizingStretchProp
                                       | ImGuiTableFlags.PadOuterX | ImGuiTableFlags.Sortable;
 
-        if (!ImGui.BeginTable("##baits", 7, flags))
+        if (!ImGui.BeginTable("##baits", 8, flags))
             return;
 
         // Die Haendlerspalte waechst mit, statt fest zu bleiben: Bei
@@ -1351,7 +1539,13 @@ internal sealed class MainWindow : Window
         // wurde am rechten Rand abgeschnitten.
         ImGui.TableSetupColumn("Bait", ImGuiTableColumnFlags.WidthStretch, 2.2f);
         ImGui.TableSetupColumn("Fish", ImGuiTableColumnFlags.WidthFixed, 54);
-        ImGui.TableSetupColumn("Have", ImGuiTableColumnFlags.WidthFixed, 58);
+
+        // "Have" zaehlte Beutel, Satteltasche und Gehilfen zusammen — richtig
+        // fuers Nachkaufen, irrefuehrend fuers Angeln: 504 Red Maggots in der
+        // Satteltasche sahen aus wie ein voller Vorrat, waehrend der Beutel
+        // leer war. Beide Zahlen stehen jetzt nebeneinander.
+        ImGui.TableSetupColumn("Total", ImGuiTableColumnFlags.WidthFixed, 58);
+        ImGui.TableSetupColumn("Bag", ImGuiTableColumnFlags.WidthFixed, 58);
         ImGui.TableSetupColumn("Target", ImGuiTableColumnFlags.WidthFixed, 62);
         ImGui.TableSetupColumn("Missing",
             ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.DefaultSort
@@ -1364,7 +1558,7 @@ internal sealed class MainWindow : Window
         ImGui.TableSetupColumn("Price", ImGuiTableColumnFlags.WidthStretch | ImGuiTableColumnFlags.NoSort, 1.5f);
         ImGui.TableSetupColumn("Vendor", ImGuiTableColumnFlags.WidthStretch | ImGuiTableColumnFlags.NoSort, 1.2f);
         ImGui.TableSetupScrollFreeze(0, 1);
-        CenteredHeadersRow(7, 1, 5);
+        CenteredHeadersRow(8, 1, 6);
 
         foreach (var row in Visible())
         {
@@ -1401,6 +1595,14 @@ internal sealed class MainWindow : Window
 
             ImGui.TableNextColumn();
             Centered(row.Have.ToString(), row.Missing > 0 ? null : Dim);
+
+            // Im Beutel: die Zahl, mit der man tatsaechlich angeln kann.
+            ImGui.TableNextColumn();
+            var shortInBag = row.Target - row.Bag;
+            Centered(row.Bag.ToString(), shortInBag > 0 ? null : Dim);
+            if (shortInBag > 0 && row.Have >= row.Target && ImGui.IsItemHovered())
+                ImGui.SetTooltip($"{shortInBag} of these are not in your bags — " +
+                                 "you own them, but you cannot fish with them there.");
             if (ImGui.IsItemHovered())
                 ImGui.SetTooltip(StockBreakdown(row));
 

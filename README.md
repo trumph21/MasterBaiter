@@ -315,6 +315,44 @@ MIT — see [LICENSE](LICENSE).
 
 ## Changelog
 
+### 0.5.0
+
+**Bait can now be moved, not just bought.** `Sort Bait Storage` goes through
+every place your bait sits — the saddlebag first, because it opens anywhere,
+then a summoning bell and each retainer. At each one it fetches what your bags
+are short of and puts away what no fish on your list needs any more. It travels
+there itself, opens each retainer, and leaves properly afterwards.
+
+**A Bag column, beside Total.** Counting the saddlebag and retainers towards
+your stock was right for buying and misleading for fishing: 504 Red Maggots with
+a retainer read as a full supply while the bag held none. Both numbers stand
+side by side now, and the one you fish with is the one you can act on.
+
+**What moving items taught this plugin.** Everything before this could only fail
+by doing nothing. Moving items can fail by doing the wrong thing, and it did —
+twice, as a disconnect. What came out of that is now built in:
+
+* **Whole stacks only**, because the game moves stacks and not amounts. A stack
+  larger than the gap stays where it is, unless your bags hold none at all.
+* **Count the room first.** Twenty-seven moves into a saddlebag with one free
+  slot are twenty-six refusals. Free slots are counted before anything is
+  queued — and only in the halves you actually have, since the premium
+  saddlebag reports seventy empty slots whether you own it or not.
+* **Three refusals end the run.** What fails three times will not work on the
+  twenty-seventh try, and every attempt is another packet.
+* **1200 ms between moves**, deliberately not scaled by `Speed %`: turning the
+  speed up should not move a limit that came out of an incident.
+* **A window that is closed is not a window that is empty.** The game reports
+  the saddlebag's slots as loaded when it is shut, and hands out empty ones.
+  Readiness is asked of the window itself now.
+
+**Retainer prices of admitting mistakes.** Which parameter opens a retainer took
+five measurements and three wrong theories — a single recording said
+`param 1`, and the rule built on it held until the second retainer. The
+reasoning is written into the source so nobody repeats the round.
+
+---
+
 ### 0.4.3
 
 **Routes are planned around the money you have.** A run used to travel to the

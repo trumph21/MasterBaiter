@@ -29,6 +29,13 @@ internal static class Tackle
 
     private static readonly HashSet<uint> Lures = [];
     private static readonly List<uint> All = [];
+
+    /// <summary>
+    /// Dieselben Kennungen zum Nachschlagen. Die Liste haelt die Reihenfolge,
+    /// aber ein <c>Contains</c> darueber laeuft je Aufruf durch alle 188 —
+    /// und die Frage "ist das Angelzeug?" wird je Inventarfach gestellt.
+    /// </summary>
+    private static readonly HashSet<uint> Lookup = [];
     private static bool _built;
 
     /// <summary>Alle Angelkoeder des Spiels, Kunstkoeder eingeschlossen.</summary>
@@ -44,6 +51,13 @@ internal static class Tackle
     public static int LureCount => Lures.Count;
     public static int MarkerCount { get; private set; }
     public static int DescriptionCount { get; private set; }
+
+    /// <summary>Ist das ueberhaupt Angelzeug?</summary>
+    public static bool Contains(uint itemId)
+    {
+        Build();
+        return Lookup.Contains(itemId);
+    }
 
     public static bool IsLure(uint itemId)
     {
@@ -77,6 +91,7 @@ internal static class Tackle
                          || description.Contains("jig", StringComparison.OrdinalIgnoreCase);
 
             All.Add(item.RowId);
+            Lookup.Add(item.RowId);
 
             if (byMarker) MarkerCount++;
             if (byText) DescriptionCount++;

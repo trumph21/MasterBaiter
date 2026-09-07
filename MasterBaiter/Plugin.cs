@@ -30,6 +30,9 @@ public sealed class Plugin : IDalamudPlugin
     private readonly MarketBoard _market;
     private readonly CosmicTravel _cosmic;
     private readonly RetainerStock _retainers;
+    private readonly StashTransfer _stash;
+    private readonly RetainerVisit _visit;
+    private readonly RetainerRun _retainerRun;
     private readonly Restock _restock;
     private VendorIndex _vendors = null!;
 
@@ -71,6 +74,8 @@ public sealed class Plugin : IDalamudPlugin
         // zusaetzlichen Zeilen keine Preise und keine Haendler, sobald jemand
         // "Show all fishing tackle" einschaltet.
         vendors.BuildAsync(baits.AllBaitIds.Concat(Tackle.AllIds).Distinct().ToList());
+        _stash = new StashTransfer(_config);
+        _visit = new RetainerVisit(_config);
         _retainers = new RetainerStock(_config);
         _retainers.Track(baits.AllBaitIds.Concat(Tackle.AllIds).Distinct());
 
@@ -90,6 +95,7 @@ public sealed class Plugin : IDalamudPlugin
         // Gedaechtnis — und das steht im Spielstand.
         Wallet.Store = _config;
         _route = new Route(_config, restock, vendors, _travel, _queue, _sweep, _market, _cosmic);
+        _retainerRun = new RetainerRun(_config, restock, vendors, _travel, _visit, _stash);
 
         // Waehrend einer Route steuert die Route den Kauf, nicht dieser Haken.
         _travel.Arrived += () =>
@@ -103,6 +109,11 @@ public sealed class Plugin : IDalamudPlugin
             // gibt. Nach der Ankunft startet die Fahrt selbst die Reise zum
             // Haendler, und dann greift der Vormerker richtig.
             if (_cosmic.Running)
+                return;
+
+            // Eine Rufglocke fuehrt keinen Laden. Der Vormerker liefe dort in
+            // seine Frist und meldete einen Fehlschlag, den es nicht gibt.
+            if (SummoningBells.IsBell(_travel.TargetDataId))
                 return;
 
             // Nicht sofort kaufen, sondern vormerken: siehe ShopFillTimeoutMs.
@@ -141,7 +152,7 @@ public sealed class Plugin : IDalamudPlugin
             Log.Information("[MasterBaiter] Nothing missing is sold here.");
         };
 
-        _main = new MainWindow(_config, restock, _queue, _sweep, _market, _cosmic, vendors, _travel, _route, _retainers);
+        _main = new MainWindow(_config, restock, _queue, _sweep, _market, _cosmic, vendors, _travel, _route, _retainers, _stash, _visit, _retainerRun);
         _windows.AddWindow(_main);
 
         Framework.Update += OnFrameworkUpdate;
@@ -183,11 +194,15 @@ public sealed class Plugin : IDalamudPlugin
 
         // Ortsgebundene Waehrungen nachlesen, solange sie lesbar sind.
         Wallet.Tick();
+        _stash.Tick();
+        _visit.Tick();
+        _retainerRun.Tick();
 
         // Was bei den Gehilfen liegt, sieht das Spiel nur, solange einer offen
         // ist. Also mitschreiben, wann immer das der Fall ist.
         _retainers.Tick();
         MarketBoards.Learn(_config);
+        SummoningBells.Learn(_config);
         _queue.Tick();
         _sweep.Tick();
         _market.Tick();
@@ -260,6 +275,7 @@ public sealed class Plugin : IDalamudPlugin
     public void Dispose()
     {
         CosmicPlanet.StopListening();
+        RetainerRecorder.Stop();
         Framework.Update -= OnFrameworkUpdate;
         Services.CommandManager.RemoveHandler(Command);
         Services.CommandManager.RemoveHandler(CommandShort);

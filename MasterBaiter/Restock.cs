@@ -100,6 +100,12 @@ internal sealed class Restock(Configuration config, BaitTable baits, GatherList 
             return;
         _nextSaddleRead = now + 1000;
 
+        // Nur bei offenem Fenster: Bei geschlossenem meldet das Spiel die
+        // Faecher als geladen und gibt leere zurueck — der gemerkte Inhalt
+        // waere danach faelschlich leer.
+        if (!Stash.Saddlebag.Ready)
+            return;
+
         var inv = InventoryManager.Instance();
         if (inv == null)
             return;

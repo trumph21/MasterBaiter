@@ -85,6 +85,14 @@ internal sealed class Configuration : IPluginConfiguration
     public List<Spot> LearnedMarketBoards { get; set; } = [];
 
     /// <summary>
+    /// Rufglocken, an denen der Charakter schon einmal vorbeigekommen ist.
+    ///
+    /// Ohne mitgelieferte Tabelle: Geratene Koordinaten schicken ihn an eine
+    /// Wand, gesehene nicht.
+    /// </summary>
+    public List<Spot> LearnedBells { get; set; } = [];
+
+    /// <summary>
     /// Der NPC, der in die Cosmic Exploration schickt. Dorthin fuehrt kein
     /// Teleport, also wird sein Standort gemerkt, sobald der Spieler einmal
     /// mit ihm gesprochen hat.

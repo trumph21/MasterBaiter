@@ -107,6 +107,9 @@ internal sealed class Travel
 
     public bool Running => _step is not (Step.Idle or Step.Done or Step.Failed);
 
+    /// <summary>Die Objekt-Id des Ziels, damit der Aufrufer weiss, wo er steht.</summary>
+    public uint TargetDataId => _target.DataId;
+
     /// <summary>
     /// Wie weit es noch bis zum Ziel ist, solange eine Reise laeuft und der
     /// Charakter im richtigen Gebiet steht. Sonst null — ueber Gebietsgrenzen
@@ -606,6 +609,13 @@ internal sealed class Travel
         {
             if (_doneWhen != null)
                 return _doneWhen();
+            // Eine Rufglocke oeffnet keine Ladentheke, sondern die
+            // Gehilfenliste. Ohne diesen Fall gilt die Ankunft als
+            // gescheitert, und die Reise spricht die Glocke wieder und wieder
+            // an, waehrend das Fenster laengst offen steht.
+            if (SummoningBells.IsBell(_target.DataId))
+                return RetainerList.IsOpen;
+
             return MarketBoards.IsBoard(_target.DataId) ? MarketBoard.IsOpen : ShopWindowReader.IsOpen;
         }
     }
@@ -819,7 +829,7 @@ internal sealed class Travel
     {
         _step = Step.Done;
         Status = $"Shop open at {_target.Npc}.";
-        Plugin.Log.Information($"[MasterBaiter] Shop opened at {_target.Npc}.");
+        Plugin.Log.Information($"[MasterBaiter] Arrived at {_target.Npc}, its window is open.");
         Arrived?.Invoke();
     }
 
