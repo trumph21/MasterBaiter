@@ -315,6 +315,38 @@ MIT — see [LICENSE](LICENSE).
 
 ## Changelog
 
+### 0.4.0
+
+**Bait you already own somewhere else now counts.** Until now only your bags
+were looked at, so 200 Mayfly in the saddlebag were bought a second time.
+
+**The saddlebag** is counted whenever it is open, and the last look is written
+to the save file. The game hands out its contents only while the bag is open —
+closing it used to make the number fall back, and a reload lost it entirely.
+
+**Retainers** are noted whenever you open one: which bait, how much, and when it
+was seen. The game only ever loads the retainer you are talking to, so this is a
+memory rather than a reading, and every line says how old it is. Retainers you
+cannot open — the ones left over after shrinking a subscription — are left out
+of the count, so the reminder to check them ends when you have checked the ones
+you can reach.
+
+Both switch on and off separately under Options, because they are not the same
+thing: the saddlebag opens anywhere, a retainer needs a summoning bell.
+
+**Hovering the Have column** shows where the stock actually is: bags, saddlebag,
+and which retainer holds the rest.
+
+**A run buys what is missing, not up to the target.** With stock outside your
+bags counting, "300" no longer means "300 in the bag", and buying up to it would
+have bought the saddlebag's contents all over again.
+
+**The Cosmic Exploration ride is checked like every other trip.** The vehicle NPC
+stands in Mare Lamentorum, which needs Bestways Burrow, and that was waved
+through unchecked — without it the plugin offered `Go`, set off, and stopped.
+
+---
+
 ### 0.3.10
 
 Both of these came from 0.3.9 itself: the two new features took the room the

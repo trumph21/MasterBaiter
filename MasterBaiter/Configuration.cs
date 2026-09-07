@@ -76,6 +76,50 @@ internal sealed class Configuration : IPluginConfiguration
     public Spot? CosmicGate { get; set; }
 
     /// <summary>
+    /// Was zuletzt bei einem Gehilfen zu sehen war.
+    ///
+    /// Gemerkt, weil das Spiel nur den gerade offenen Gehilfen bereithaelt.
+    /// Mit Datum, damit die Anzeige nie so tut, als waere eine Erinnerung
+    /// dasselbe wie ein Blick.
+    /// </summary>
+    [Serializable]
+    internal sealed class RetainerNote
+    {
+        public string Name { get; set; } = string.Empty;
+        public DateTime Seen { get; set; }
+        public Dictionary<uint, int> Items { get; set; } = new();
+    }
+
+    public Dictionary<ulong, RetainerNote> Retainers { get; set; } = new();
+
+    /// <summary>
+    /// Zaehlt der Vorrat bei den Gehilfen gegen die Fehlmenge?
+    ///
+    /// Standardmaessig ja, aber abschaltbar: Anders als die Satteltasche, die
+    /// ueberall aufgeht, kommt man an einen Gehilfen nur an der Rufglocke.
+    /// Wer den Vorrat nicht holen will, will ihn auch nicht abgezogen haben.
+    /// </summary>
+    public bool CountRetainers { get; set; } = true;
+
+    /// <summary>
+    /// Zaehlt der Vorrat in der Satteltasche gegen die Fehlmenge? Getrennt von
+    /// den Gehilfen, weil die Tasche ueberall aufgeht und der Gehilfe nicht.
+    /// </summary>
+    public bool CountSaddlebag { get; set; } = true;
+
+    /// <summary>
+    /// Was zuletzt in der Satteltasche zu sehen war, samt Zeitpunkt.
+    ///
+    /// Wie bei den Gehilfen im Spielstand und nicht nur im Speicher: Das Spiel
+    /// gibt den Inhalt nur her, solange die Tasche offen ist, und nach einem
+    /// Neuladen waere er sonst wieder unbekannt — man muesste sie jedes Mal
+    /// erneut aufmachen.
+    /// </summary>
+    public Dictionary<uint, int> Saddlebag { get; set; } = new();
+
+    public DateTime? SaddlebagSeen { get; set; }
+
+    /// <summary>
     /// Tempo aller automatischen Handlungen in Prozent. 100 ist der Grundwert,
     /// kleinere Zahlen sind schneller.
     /// </summary>

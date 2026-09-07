@@ -59,7 +59,16 @@ internal sealed class PurchaseQueue(Configuration config)
         {
             if (r.Ignored || !r.InShop || r.Missing <= 0)
                 continue;
-            _jobs.Add(new Job { BaitId = r.BaitId, Name = r.Name, Target = r.Target });
+            // Das Ziel des Kaufs ist der Beutel, nicht der Gesamtbestand: Was
+            // in der Satteltasche liegt, zaehlt gegen die Fehlmenge, wandert
+            // aber durch keinen Kauf in den Beutel. Wer hier r.Target nimmt,
+            // kauft den Inhalt der Satteltasche ein zweites Mal.
+            _jobs.Add(new Job
+            {
+                BaitId = r.BaitId,
+                Name = r.Name,
+                Target = Restock.CountInInventory(r.BaitId) + r.Missing,
+            });
         }
 
         if (_jobs.Count > 0)

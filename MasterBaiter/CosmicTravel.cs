@@ -90,6 +90,15 @@ internal sealed class CosmicTravel(Configuration config, Travel travel, VendorIn
         }
     }
 
+    /// <summary>
+    /// Der Teleportpunkt, an dem der Weg zu den Planeten beginnt, und sein
+    /// Gebiet. <see cref="Reach"/> braucht beides, um zu beantworten, ob dieser
+    /// Weg fuer diesen Charakter ueberhaupt offensteht.
+    /// </summary>
+    public uint GateAetheryteId => Gate.AetheryteId;
+
+    public uint GateTerritory => Gate.Territory;
+
     /// <summary>Einen Weg gibt es immer, notfalls den eingebauten.</summary>
     public bool GateKnown => true;
 

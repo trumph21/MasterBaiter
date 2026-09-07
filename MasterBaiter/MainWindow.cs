@@ -23,6 +23,7 @@ internal sealed class MainWindow : Window
     private VendorIndex.Vendor? _board;
     private long _boardAt;
     private readonly VendorIndex _vendors;
+    private readonly RetainerStock _retainers;
     private readonly Travel _travel;
     private readonly Route _route;
     // Welche Zeile gerade ihr Ziel bearbeitet. 0 heisst: keine.
@@ -41,7 +42,7 @@ internal sealed class MainWindow : Window
     private DateTime _messageUntil;
     private bool _wasRunning;
 
-    public MainWindow(Configuration config, Restock restock, PurchaseQueue queue, ScripSweep sweep, MarketBoard market, CosmicTravel cosmic, VendorIndex vendors, Travel travel, Route route)
+    public MainWindow(Configuration config, Restock restock, PurchaseQueue queue, ScripSweep sweep, MarketBoard market, CosmicTravel cosmic, VendorIndex vendors, Travel travel, Route route, RetainerStock retainers)
         : base($"MasterBaiter {VersionText}###MasterBaiterMain")
     {
         _config = config;
@@ -51,6 +52,7 @@ internal sealed class MainWindow : Window
         _market = market;
         _cosmic = cosmic;
         _vendors = vendors;
+        _retainers = retainers;
         _travel = travel;
         _route = route;
         Size = new Vector2(620, 480);
@@ -277,6 +279,33 @@ internal sealed class MainWindow : Window
             : $"{orphans.Count} of {relevant.Count} needed baits have no shop and no recipe.");
         if (orphans.Count > 0 && ImGui.IsItemHovered())
             ImGui.SetTooltip(string.Join(Environment.NewLine, orphans.Take(20).Select(r => r.Name)));
+
+        // Der Vorrat bei den Gehilfen laesst sich nicht erfragen, nur
+        // mitschreiben. Wer das nicht weiss, haelt eine fehlende Zahl fuer
+        // eine Null — also einmal sagen, was zu tun ist, statt es im
+        // Hinweistext zu verstecken.
+        if (!_config.CountRetainers)
+            return;
+
+        var (total, seen) = _retainers.Coverage();
+
+        if (total > 0 && seen >= total)
+            return;
+        if (total == 0 && seen > 0)
+            return;
+
+        ImGui.TextColored(Wanted, total > 0
+            ? seen == 0
+                ? $"None of your {total} retainers have been counted yet."
+                : $"{total - seen} of {total} retainers have not been counted yet."
+            : "No retainer has been counted yet.");
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(
+                "The game only hands out a retainer's contents while that retainer is open." +
+                Environment.NewLine +
+                "Open each one once at a summoning bell and the bait in it counts towards" +
+                Environment.NewLine +
+                "your target, so it is not bought a second time.");
     }
 
     // ---------- Reiter "Options" ----------
@@ -306,6 +335,47 @@ internal sealed class MainWindow : Window
         }
         if (ImGui.IsItemHovered())
             ImGui.SetTooltip($"{Tackle.LureCount} fishing tackle items count as lures.");
+
+        var countSaddle = _config.CountSaddlebag;
+        if (ImGui.Checkbox("Count what is in your saddlebag", ref countSaddle))
+        {
+            _config.CountSaddlebag = countSaddle;
+            _config.Save();
+            _restock.Refresh();
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(string.Join(Environment.NewLine,
+                "Bait in your saddlebag counts towards the target, so it is not bought twice.",
+                "Off: what is in your saddlebag is ignored.",
+                "Counted only after you have opened it once — " +
+                (_restock.SaddlebagSeen is { } seenAt
+                    ? $"last look {Ago(seenAt)}."
+                    : "not counted yet."),
+                "The saddlebag opens anywhere."));
+
+        var countRetainers = _config.CountRetainers;
+        if (ImGui.Checkbox("Count what your retainers hold", ref countRetainers))
+        {
+            _config.CountRetainers = countRetainers;
+            _config.Save();
+            _restock.Refresh();
+        }
+        if (ImGui.IsItemHovered())
+        {
+            // Beide Schalter tun dasselbe an verschiedenen Orten, also sagen
+            // sie es auch im selben Bau: was es bewirkt, was Aus bedeutet, was
+            // schon gezaehlt ist, und wie man drankommt. Was sich unterscheidet,
+            // faellt dann von selbst auf.
+            var (total, seen) = _retainers.Coverage();
+            ImGui.SetTooltip(string.Join(Environment.NewLine,
+                "Bait with your retainers counts towards the target, so it is not bought twice.",
+                "Off: what your retainers hold is ignored.",
+                "Counted only after you have opened them once — " +
+                (total > 0
+                    ? $"{seen} of {total} done."
+                    : seen > 0 ? $"{seen} counted so far." : "none counted yet."),
+                "A retainer needs a summoning bell."));
+        }
 
         Section("Market board");
         ImGui.TextDisabled("Prices here are set by players, not by the game, so both limits always apply.");
@@ -558,7 +628,9 @@ internal sealed class MainWindow : Window
         ImGui.Spacing();
         ImGui.TextDisabled(_vendors.Ready
             ? $"{Tackle.LureCount} lures known, {_vendors.VendorCount} vendor entries, " +
-              $"{Teleportable.Count} teleport destinations."
+              $"{Teleportable.Count} teleport destinations, " +
+              $"{_retainers.Coverage().Seen} of {_retainers.Coverage().Total} retainers counted, " +
+              (_restock.SaddlebagRead ? "saddlebag counted." : "saddlebag not counted yet.")
             : "Building the vendor index...");
     }
 
@@ -743,6 +815,74 @@ internal sealed class MainWindow : Window
             ImGui.SetTooltip(text);
     }
 
+    /// <summary>
+    /// Woraus sich der Bestand zusammensetzt.
+    ///
+    /// Eine blanke Summe verschweigt das Entscheidende: Was in der
+    /// Satteltasche liegt, holt man ueberall; was bei einem Gehilfen liegt, nur
+    /// an der Rufglocke. Und was nie nachgesehen wurde, ist keine Null,
+    /// sondern eine Unbekannte.
+    /// </summary>
+    private string StockBreakdown(Restock.Row row)
+    {
+        var lines = new List<string> { $"{row.Bag} in your bags" };
+
+        // Abgeschaltet heisst: kommt hier nicht vor. Wer den Schalter umgelegt
+        // hat, braucht keine Zeile, die ihn daran erinnert — die Gehilfen
+        // halten es genauso.
+        //
+        // Eingeschaltet dagegen immer eine Aussage, auch wenn nichts drin
+        // liegt: Ohne sie ist "160 in your bags" nicht davon zu unterscheiden,
+        // dass die Tasche nie gezaehlt wurde.
+        if (_config.CountSaddlebag)
+        {
+            if (!row.SaddleKnown)
+                lines.Add("Saddlebag not counted — the game only hands out its contents "
+                          + "once it has been opened.");
+            else
+                lines.Add(row.Saddle > 0
+                    ? $"{row.Saddle} in the saddlebag"
+                        + (row.SaddleSeen is { } when ? $" ({Ago(when)})" : string.Empty)
+                    : "nothing in the saddlebag");
+        }
+
+        if (_config.CountRetainers)
+        {
+            var holdings = _retainers.Where(row.BaitId);
+            foreach (var holding in holdings)
+                lines.Add($"{holding.Count} with {holding.Name} ({Ago(holding.Seen)})");
+
+            // Kennt das Spiel die Anzahl noch nicht, ist sie null — und "0 > 0"
+            // ist falsch, also stand hier gar nichts. Genau dann ist der
+            // Hinweis am noetigsten.
+            var (total, seen) = _retainers.Coverage();
+            if (total > 0 && seen < total)
+                lines.Add($"{total - seen} of {total} retainers not counted yet — "
+                          + "open them once at a summoning bell.");
+            else if (total == 0 && seen == 0)
+                lines.Add("No retainer counted yet — open one at a summoning bell "
+                          + "and what it holds counts too.");
+            else if (holdings.Count == 0)
+                // Alle gezaehlt und nichts gefunden ist eine Auskunft. Sie
+                // wegzulassen liesse offen, ob nachgesehen wurde — genau der
+                // Grund, aus dem bei der Satteltasche "nothing" dasteht.
+                lines.Add("nothing with your retainers");
+        }
+
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private static string Ago(DateTime when)
+    {
+        var age = DateTime.Now - when;
+
+        if (age.TotalMinutes < 1) return "just now";
+        if (age.TotalHours < 1) return $"{(int)age.TotalMinutes} min ago";
+        if (age.TotalDays < 1) return $"{(int)age.TotalHours} h ago";
+
+        return $"{(int)age.TotalDays} d ago";
+    }
+
     /// <summary>Suchfeld ueber der Tabelle.</summary>
     private void DrawFilter()
     {
@@ -871,6 +1011,8 @@ internal sealed class MainWindow : Window
 
             ImGui.TableNextColumn();
             Centered(row.Have.ToString(), row.Missing > 0 ? null : Dim);
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip(StockBreakdown(row));
 
             // Zwanzig Eingabekaesten untereinander waren das lauteste in der
             // Tabelle, und ihre Zahl stand als einzige links, waehrend die

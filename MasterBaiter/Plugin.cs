@@ -29,6 +29,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly ScripSweep _sweep;
     private readonly MarketBoard _market;
     private readonly CosmicTravel _cosmic;
+    private readonly RetainerStock _retainers;
     private readonly Restock _restock;
     private VendorIndex _vendors = null!;
 
@@ -70,13 +71,20 @@ public sealed class Plugin : IDalamudPlugin
         // zusaetzlichen Zeilen keine Preise und keine Haendler, sobald jemand
         // "Show all fishing tackle" einschaltet.
         vendors.BuildAsync(baits.AllBaitIds.Concat(Tackle.AllIds).Distinct().ToList());
-        var restock = new Restock(_config, baits, new GatherList());
+        _retainers = new RetainerStock(_config);
+        _retainers.Track(baits.AllBaitIds.Concat(Tackle.AllIds).Distinct());
+
+        var restock = new Restock(_config, baits, new GatherList(), _retainers);
         _restock = restock;
         _queue = new PurchaseQueue(_config);
         _sweep = new ScripSweep(_config, restock, _queue, vendors);
         _market = new MarketBoard(_config, restock);
         _travel = new Travel();
         _cosmic = new CosmicTravel(_config, _travel, vendors);
+
+        // Reach beantwortet die Frage nach der Erreichbarkeit fuer alle
+        // Aufrufer an einer Stelle und braucht dafuer den Cosmic-Weg.
+        Reach.Cosmic = _cosmic;
         _route = new Route(_config, restock, vendors, _travel, _queue, _sweep, _market, _cosmic);
 
         // Waehrend einer Route steuert die Route den Kauf, nicht dieser Haken.
@@ -129,7 +137,7 @@ public sealed class Plugin : IDalamudPlugin
             Log.Information("[MasterBaiter] Nothing missing is sold here.");
         };
 
-        _main = new MainWindow(_config, restock, _queue, _sweep, _market, _cosmic, vendors, _travel, _route);
+        _main = new MainWindow(_config, restock, _queue, _sweep, _market, _cosmic, vendors, _travel, _route, _retainers);
         _windows.AddWindow(_main);
 
         Framework.Update += OnFrameworkUpdate;
@@ -166,6 +174,11 @@ public sealed class Plugin : IDalamudPlugin
         _cosmic.Tick();
         Sprint.Tick(_config, _travel, _route, _cosmic);
         Teleportable.Tick();
+        _restock.SaddlebagTick();
+
+        // Was bei den Gehilfen liegt, sieht das Spiel nur, solange einer offen
+        // ist. Also mitschreiben, wann immer das der Fall ist.
+        _retainers.Tick();
         MarketBoards.Learn(_config);
         _queue.Tick();
         _sweep.Tick();
