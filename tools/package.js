@@ -75,6 +75,44 @@ execFileSync("powershell.exe", [
   `Compress-Archive -Path '${path.join(stage, "*")}' -DestinationPath '${zip}' -Force`,
 ], { stdio: "inherit" });
 
+// ---- Downloadzahl ----
+//
+// Dalamud zeigt sie im Installer, zaehlt sie fuer eine eigene Quelle aber
+// nicht: Die Zahl steht schlicht im Manifest, und wer die Datei schreibt,
+// schreibt auch die Zahl. Gezaehlt wird ohnehin woanders — GitHub fuehrt je
+// Release-Anhang einen Zaehler, und das ist so nah an "installiert" wie es
+// von aussen zu haben ist.
+//
+// Es ist eine Momentaufnahme: Sie steht so lange still, bis repo.json das
+// naechste Mal erzeugt und hochgeladen wird.
+function downloadCount(previous) {
+  try {
+    const out = execFileSync(
+      "gh",
+      ["api", "repos/trumph21/MasterBaiter/releases",
+       "--jq", "[.[].assets[].download_count] | add // 0"],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+
+    const count = parseInt(out.trim(), 10);
+    if (Number.isFinite(count) && count >= 0)
+      return count;
+  } catch {
+    // Kein gh, kein Netz, kein Zugriff — dann die alte Zahl behalten.
+  }
+
+  console.log("package: download count not available, keeping " + previous);
+  return previous;
+}
+
+const repoFile = path.join(root, "repo.json");
+const previousCount = (() => {
+  try {
+    return JSON.parse(fs.readFileSync(repoFile, "utf8"))[0]?.DownloadCount ?? 0;
+  } catch {
+    return 0;
+  }
+})();
+
 // ---- repo.json fuer die Plugin-Verwaltung in Dalamud ----
 const download = `${repoUrl}/releases/latest/download/MasterBaiter.zip`;
 const entry = {
@@ -97,7 +135,7 @@ const entry = {
   AcceptsFeedback: manifest.AcceptsFeedback ?? false,
   IsHide: false,
   LastUpdate: Math.floor(Date.now() / 1000),
-  DownloadCount: 0,
+  DownloadCount: downloadCount(previousCount),
   DownloadLinkInstall: download,
   DownloadLinkUpdate: download,
   DownloadLinkTesting: download,
@@ -106,4 +144,4 @@ const entry = {
 fs.writeFileSync(path.join(root, "repo.json"), JSON.stringify([entry], null, 2) + "\n");
 
 const size = (fs.statSync(zip).size / 1024).toFixed(0);
-console.log(`package: MasterBaiter ${version} -> dist/MasterBaiter.zip (${size} KB), repo.json updated`);
+console.log(`package: MasterBaiter ${version} -> dist/MasterBaiter.zip (${size} KB), repo.json updated, ${entry.DownloadCount} downloads`);
