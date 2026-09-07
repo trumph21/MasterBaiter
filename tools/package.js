@@ -80,36 +80,47 @@ execFileSync("powershell.exe", [
 // Dalamud zeigt sie im Installer, zaehlt sie fuer eine eigene Quelle aber
 // nicht: Die Zahl steht schlicht im Manifest, und wer die Datei schreibt,
 // schreibt auch die Zahl. Gezaehlt wird ohnehin woanders — GitHub fuehrt je
-// Release-Anhang einen Zaehler, und das ist so nah an "installiert" wie es
+// Release-Anhang einen Zaehler, und das ist so nah an "installiert", wie es
 // von aussen zu haben ist.
 //
-// Es ist eine Momentaufnahme: Sie steht so lange still, bis repo.json das
-// naechste Mal erzeugt und hochgeladen wird.
-function downloadCount(previous) {
+// Gezaehlt wird nur das Release dieser Version, nicht die Summe aller.
+// Daraus folgt zweierlei, und beides ist Absicht:
+//
+//   * Direkt nach dem Veroeffentlichen steht dort null. Das ist richtig —
+//     heruntergeladen hat die neue Fassung noch niemand.
+//   * Die Zahl waechst nur, wenn dieses Skript spaeter noch einmal laeuft und
+//     repo.json neu hochgeladen wird. Ein Aufruf ohne neue Version genuegt.
+//
+// Existiert das Release noch nicht, ist null die Antwort. Faellt dagegen der
+// Zugriff aus — kein gh, kein Netz —, bleibt die alte Zahl stehen: Ein
+// Zaehler, der bei jedem Packen ohne Netz von vorn anfaengt, waere schlimmer
+// als ein veralteter.
+function downloadCount(previous, tag) {
+  let stderr = "";
+
   try {
-    // Geblaettert und je Anhang eine Zeile, statt einer fertigen Summe:
-    // Ohne --paginate liefert die Schnittstelle nur die ersten dreissig
-    // Releases, und der Zaehler unterschluege ab dem einunddreissigsten
-    // stillschweigend die aeltesten. Mit --paginate wertet gh das --jq je
-    // Seite aus, eine Summe je Seite waere also auch falsch — deshalb wird
-    // hier addiert.
     const out = execFileSync(
       "gh",
-      ["api", "--paginate", "repos/trumph21/MasterBaiter/releases",
-       "--jq", ".[].assets[].download_count"],
-      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+      ["api", `repos/trumph21/MasterBaiter/releases/tags/${tag}`,
+       "--jq", ".assets[].download_count"],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 
     const numbers = out.split(/\r?\n/)
       .map((line) => parseInt(line.trim(), 10))
       .filter((n) => Number.isFinite(n) && n >= 0);
 
-    if (numbers.length > 0)
-      return numbers.reduce((sum, n) => sum + n, 0);
-  } catch {
-    // Kein gh, kein Netz, kein Zugriff — dann die alte Zahl behalten.
+    return numbers.reduce((sum, n) => sum + n, 0);
+  } catch (e) {
+    stderr = String(e.stderr || "");
   }
 
-  console.log("package: download count not available, keeping " + previous);
+  // Kein solches Release: Dann ist null keine Ausrede, sondern die Auskunft.
+  if (/404|Not Found/i.test(stderr)) {
+    console.log(`package: no release ${tag} yet, download count starts at 0`);
+    return 0;
+  }
+
+  console.log(`package: download count not available, keeping ${previous}`);
   return previous;
 }
 
@@ -144,7 +155,7 @@ const entry = {
   AcceptsFeedback: manifest.AcceptsFeedback ?? false,
   IsHide: false,
   LastUpdate: Math.floor(Date.now() / 1000),
-  DownloadCount: downloadCount(previousCount),
+  DownloadCount: downloadCount(previousCount, `v${version}`),
   DownloadLinkInstall: download,
   DownloadLinkUpdate: download,
   DownloadLinkTesting: download,
