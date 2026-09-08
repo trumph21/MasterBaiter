@@ -33,6 +33,15 @@ internal sealed class Travel
     private const float ApproachOffset = 2.5f;
 
     /// <summary>
+    /// Ab welcher Naehe zwei Ausweichpunkte als derselbe gelten.
+    ///
+    /// Etwas unter der Ankunftsreichweite: Wer dort schon steht, hat den Punkt
+    /// bereits abgelaufen, und ihn erneut anzusteuern kostet einen Versuch
+    /// ohne jede Aenderung.
+    /// </summary>
+    private const float SameSpotDistance = 2f;
+
+    /// <summary>
     /// Wie oft das Absitzen versucht wird, bevor es trotzdem weitergeht.
     ///
     /// Der Befehl ist gesperrt, solange der Charakter noch in einer Bewegung
@@ -52,8 +61,13 @@ internal sealed class Travel
     /// im Weg steht, merkt niemand. In Tuliyollal hat der Charakter so
     /// sechsundachtzig Sekunden lang gegen eine Kiste gedrueckt — der Pfad galt
     /// die ganze Zeit als "laeuft noch".
+    ///
+    /// Von fuenf auf drei Sekunden: Waehrend ein Weg laeuft, ist Stillstand
+    /// ohnehin schon der Ausnahmefall, und die fuenf waren an Goplus Stand
+    /// jedes Mal voll auszusitzen, bevor der naechste Platz drankam. Kuerzer
+    /// wird riskant — ein Flugstart hebt den Charakter fast auf der Stelle ab.
     /// </summary>
-    private const int StuckMs = 5000;
+    private const int StuckMs = 3000;
 
     /// <summary>Weniger Bewegung als das gilt als keine.</summary>
     private const float StuckDistance = 0.7f;
@@ -88,6 +102,12 @@ internal sealed class Travel
     private long _deadline;
     private long _nextActionAt;
     private int _approachRetries;
+
+    /// <summary>
+    /// Die Punkte, die bei diesem Ziel schon angelaufen wurden. Damit ein
+    /// zweiter Versuch auch wirklich woanders hinfuehrt.
+    /// </summary>
+    private readonly List<Vector3> _tried = [];
     private int _talkAttempts;
     private Vector3 _lastPosition;
     private long _movedAt;
@@ -212,6 +232,7 @@ internal sealed class Travel
 
         _target = vendor;
         _approachRetries = 0;
+        _tried.Clear();
         _talkAttempts = 0;
         _zoneSettledAt = 0;
         _doneWhen = null;
@@ -425,18 +446,49 @@ internal sealed class Travel
                     return;
                 }
 
+                // Erst wenn der Charakter wirklich in der Welt steht.
+                //
+                // Nach einem Teleport meldet das Spiel den Gebietswechsel, bevor
+                // es den Charakter absetzt: Seine Position ist dann noch der
+                // Nullpunkt der Karte. Ein Weg, der von dort aus gerechnet wird,
+                // ist ein anderer als der, den er braucht — im Protokoll stand
+                // "Kicking off pathfind from <0. 0. 0>", und der Charakter ist
+                // danach zehn Sekunden lang gegen den Aetherkristall gelaufen,
+                // bis ihn die Steckenerkennung aufgehalten hat.
+                //
+                // Der Gebietswechsel ist also nicht das Ankommen. Zweihundert
+                // Millisekunden lagen dazwischen.
+                if (!Placed())
+                {
+                    Status = "Waiting for the character to arrive.";
+                    return;
+                }
+
                 // Steht der NPC schon in der Objektliste, ist seine
                 // tatsaechliche Position besser als die hinterlegte: Die ist
                 // aufgeschrieben, teils mit geschaetzter Hoehe, und der NPC
                 // steht da, wo er steht.
-                var destination = LiveTargetPosition() ?? _target.World;
+                var live = LiveTargetPosition();
+                var destination = live ?? _target.World;
 
                 if (_approachRetries > 0)
-                    destination = OffsetSpot(destination, _approachRetries);
+                    destination = NextSpot(destination);
 
-                if (_target.ApproximateHeight)
+                // Den Boden nur suchen, wenn die Hoehe wirklich geraten ist.
+                //
+                // <c>ApproximateHeight</c> beschreibt den Tabelleneintrag, nicht
+                // die Ablesung: Steht der NPC in der Objektliste, ist seine Hoehe
+                // gemessen, und sie durch eine Bodensuche zu ersetzen heisst,
+                // eine Auskunft gegen eine Schaetzung zu tauschen.
+                //
+                // In Tuliyollal hat das einen Halt gekostet. Goplu steht auf
+                // y -0,97; die Bodensuche mit zehn Einheiten Spielraum fand das
+                // Deck darunter auf y -9,75. Der Charakter lief brav dorthin,
+                // stand neun Einheiten unter dem Haendler und meldete
+                // "12,9 away, too far to interact" — sechsmal, bis der Halt
+                // ausfiel. Der Weg war richtig, das Stockwerk nicht.
+                if (live == null && _target.ApproximateHeight)
                 {
-                    // Die Datenbank kennt keine Hoehe. vnavmesh sucht den Boden.
                     try
                     {
                         var onFloor = _navPointOnFloor.InvokeFunc(destination, false, 10f);
@@ -445,6 +497,14 @@ internal sealed class Travel
                     }
                     catch { /* dann eben ohne */ }
                 }
+
+                _tried.Add(destination);
+                Trace.Say($"Walking to {_target.Npc}: " +
+                          $"({destination.X:0.0}, {destination.Y:0.0}, {destination.Z:0.0}), " +
+                          (live is { } l
+                              ? $"live position, height {l.Y:0.0}"
+                              : $"stored position, height {(_target.ApproximateHeight ? "guessed" : "known")}") +
+                          $", attempt {_approachRetries + 1}.");
 
                 // Fliegen nur, wo es freigeschaltet ist — sonst plant vnavmesh
                 // einen Weg durch die Luft, den der Charakter nicht nehmen kann.
@@ -725,6 +785,51 @@ internal sealed class Travel
     /// Ein Punkt auf einem Kreis um das Ziel. Der erste Versuch laeuft den NPC
     /// unmittelbar an, jeder weitere stellt sich woanders hin.
     /// </summary>
+    /// <summary>
+    /// Der naechste Ausweichpunkt, der nicht schon einmal angelaufen wurde.
+    ///
+    /// Die blosse Winkelrechnung genuegte nicht: Weil sich der Mittelpunkt
+    /// zwischen den Versuchen aendert — mal die gemessene Position des NPC, mal
+    /// die gespeicherte —, kamen bei Goplu dreimal hintereinander genau
+    /// dieselben Koordinaten heraus. Der Charakter stand bereits dort, vnavmesh
+    /// meldete nach einer Sekunde "angekommen", und die letzten drei von sechs
+    /// Versuchen waren aufgebraucht, ohne dass je ein neuer Platz probiert
+    /// wurde.
+    ///
+    /// Ein Wiederholungsversuch, der dasselbe tut, ist keiner.
+    /// </summary>
+    private Vector3 NextSpot(Vector3 centre)
+    {
+        for (var attempt = _approachRetries; attempt <= ApproachSpots; attempt++)
+        {
+            var spot = OffsetSpot(centre, attempt);
+            if (_tried.All(t => Vector3.Distance(t, spot) > SameSpotDistance))
+                return spot;
+        }
+
+        // Alle belegt: dann eben der vorgesehene. Besser ein wiederholter
+        // Versuch als gar keiner.
+        return OffsetSpot(centre, _approachRetries);
+    }
+
+    /// <summary>
+    /// Steht der Charakter in der Welt, oder ist er noch unterwegs dorthin?
+    ///
+    /// Der Nullpunkt ist das Zeichen fuer "noch nicht abgesetzt". Eine echte
+    /// Position genau dort gibt es in keinem Gebiet dieses Spiels, und selbst
+    /// wenn: eine Sekunde spaeter zu laufen kostet weniger als ein Weg vom
+    /// falschen Anfang.
+    /// </summary>
+    private static bool Placed()
+    {
+        if (Plugin.Condition[Dalamud.Game.ClientState.Conditions.ConditionFlag.BetweenAreas]
+            || Plugin.Condition[Dalamud.Game.ClientState.Conditions.ConditionFlag.BetweenAreas51])
+            return false;
+
+        var me = Plugin.ObjectTable.LocalPlayer;
+        return me != null && me.Position.LengthSquared() > 0.01f;
+    }
+
     private static Vector3 OffsetSpot(Vector3 centre, int attempt)
     {
         var angle = MathF.Tau * (attempt - 1) / ApproachSpots;

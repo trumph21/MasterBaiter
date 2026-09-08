@@ -315,6 +315,36 @@ MIT — see [LICENSE](LICENSE).
 
 ## Changelog
 
+### 0.5.6
+
+Three findings, all of them read straight out of the log that 0.5.5 added.
+
+**A zone change is not an arrival.** 216 milliseconds after the territory
+changed, the plugin asked for a path — and the game had not put the character
+down yet, so its position was still the map origin. vnavmesh dutifully worked
+out a route from there, and the character then walked that stranger's route from
+where he actually stood: into the aetheryte, for ten seconds, until the stuck
+detection stopped him. This happened after every teleport, not just in one zone.
+
+**A measured height is better than a guessed one.** `ApproximateHeight`
+describes the shipped table entry, not the reading. When the NPC is in the
+object table their height is measured, and asking vnavmesh for "the floor near
+here" replaced it with a guess. In Tuliyollal, which is built on several levels,
+that guess found the deck below: the character stood nine units under Goplu and
+reported "12,9 away, too far to interact" six times until the stop was dropped.
+The floor is only searched now when there is no measurement to throw away.
+
+**Six approach spots that were three.** The angles were computed around a centre
+that changed between attempts, so attempts 4, 5 and 6 came out at the exact
+coordinates of attempt 1 — a place the character was already standing. vnavmesh
+reported arrival in under a second and the retry budget was spent without ever
+trying somewhere new. Spots already walked to are remembered now.
+
+**Also:** walking into something is noticed after three seconds rather than
+five. While a path is running, standing still is already the exception.
+
+---
+
 ### 0.5.5
 
 **The log follows the whole run now.** Every failure in this plugin looks
