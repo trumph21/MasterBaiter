@@ -130,6 +130,20 @@ internal sealed class Configuration : IPluginConfiguration
     public Dictionary<uint, DateTime> CurrenciesSeen { get; set; } = new();
 
     /// <summary>
+    /// Koeder, fuer die das Marktbrett zuletzt nichts hergab, mit dem
+    /// Zeitpunkt.
+    ///
+    /// Eine Abfrage kostet fuenf Sekunden Frist, zwei Anlaeufe und drei
+    /// Sekunden Abstand zur naechsten. Denselben Koeder bei jedem Lauf erneut
+    /// zu erfragen, obwohl er seit Stunden nicht angeboten wird, ist Zeit, die
+    /// nichts einbringt.
+    ///
+    /// Mit Zeitstempel, weil das Gegenteil genauso teuer waere: Ein Koeder, der
+    /// heute nicht gelistet war, kann morgen dastehen.
+    /// </summary>
+    public Dictionary<uint, DateTime> Unlisted { get; set; } = new();
+
+    /// <summary>
     /// Zaehlt der Vorrat bei den Gehilfen gegen die Fehlmenge?
     ///
     /// Standardmaessig ja, aber abschaltbar: Anders als die Satteltasche, die

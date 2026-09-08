@@ -399,46 +399,28 @@ internal sealed unsafe class StashTransfer(Configuration config)
         if (inv == null)
             return 0;
 
+        // Was zu kurz ist. Ignorierte und volle Koeder stehen gar nicht erst
+        // drin, damit die Regel sie nicht noch einmal pruefen muss.
+        var shortBy = new Dictionary<uint, int>();
         foreach (var row in rows)
         {
-            // Nach dem Beutel, nicht nach dem Gesamtbestand: Was im Lager
-            // liegt, zaehlt gegen die Fehlmenge — geholt werden muss es
-            // trotzdem, sonst hat man es nicht zur Hand.
             var room = row.Target - row.Bag;
-            if (row.Ignored || room <= 0)
-                continue;
-
-            foreach (var type in _stash.Containers)
-            {
-                var bag = inv->GetInventoryContainer(type);
-                if (bag == null || !bag->IsLoaded)
-                    continue;
-
-                for (ushort i = 0; i < bag->Size; i++)
-                {
-                    var slot = bag->GetInventorySlot(i);
-                    if (slot == null || slot->ItemId != row.BaitId)
-                        continue;
-
-                    // Auch ein Stapel, der die Zielmenge ueberschreitet, wird
-                    // geholt.
-                    //
-                    // Frueher blieb er liegen, weil das Wegraeumen damals alles
-                    // ueber der Zielmenge nahm — der Stapel waere sofort
-                    // zurueckgewandert. Seit weggeraeumt wird, was kein Fisch
-                    // mehr braucht, gibt es dieses Hin und Her nicht mehr, und
-                    // die Regel kostete nur noch: 288 Squid Strip im Beutel, 79
-                    // beim Gehilfen, Ziel 300 — der Stapel passte nicht in die
-                    // Luecke von zwoelf und blieb liegen, obwohl er gebraucht
-                    // wurde und niemandem weh tut.
-                    var amount = (int)slot->Quantity;
-                    _queue.Add(new Move(row.BaitId, row.Name, type, i, amount, false));
-                    room -= amount;
-                }
-            }
+            if (!row.Ignored && room > 0)
+                shortBy[row.BaitId] = room;
         }
 
-        Cap(FreeSlots(false), "free bag slot(s)", $"stay {_stash.Into}");
+        var names = new Dictionary<uint, string>();
+        foreach (var row in rows)
+            names.TryAdd(row.BaitId, row.Name);
+
+        var (offers, places) = Survey(_stash.Containers);
+        foreach (var index in StashPlan.Fetch(offers, shortBy, FreeSlots(false)))
+        {
+            var offer = offers[index];
+            var (container, slot) = places[index];
+            _queue.Add(new Move(offer.ItemId, names.GetValueOrDefault(offer.ItemId, "bait"),
+                container, slot, offer.Amount, false));
+        }
 
         Running = _queue.Count > 0;
         Status = Running ? $"{_queue.Count} stack(s) to fetch." : "Nothing to fetch — your bags are full.";
@@ -450,25 +432,22 @@ internal sealed unsafe class StashTransfer(Configuration config)
     }
 
     /// <summary>
-    /// Stellt zusammen, was weggeraeumt werden kann.
+    /// Zaehlt auf, was in diesen Faechern liegt.
     ///
-    /// Weggeraeumt wird nur, was <b>kein Fisch der Liste mehr braucht</b>. Ein
-    /// Ueberschuss ueber die Zielmenge ist kein Grund: Wer dreihundert als Ziel
-    /// hat und vierhundert besitzt, will die hundert im Beutel behalten.
-    ///
-    /// Und nur ganze Stapel, die nicht unter die Zielmenge fuehren.
+    /// Die einzige Stelle, die das Spiel fragt — was danach damit geschieht,
+    /// entscheidet <see cref="StashPlan"/> ohne Spielzugriff.
     /// </summary>
-    private int FillStow(Restock restock)
+    private (List<StashPlan.Offer> Offers, List<(InventoryType Container, ushort Slot)> Places)
+        Survey(InventoryType[] containers)
     {
+        var offers = new List<StashPlan.Offer>();
+        var places = new List<(InventoryType, ushort)>();
+
         var inv = InventoryManager.Instance();
         if (inv == null)
-            return 0;
+            return (offers, places);
 
-        var needed = NeededIds(restock);
-        var keptWhole = 0;
-        var left = new Dictionary<uint, int>();
-
-        foreach (var type in Bags)
+        foreach (var type in containers)
         {
             var bag = inv->GetInventoryContainer(type);
             if (bag == null || !bag->IsLoaded)
@@ -480,31 +459,72 @@ internal sealed unsafe class StashTransfer(Configuration config)
                 if (slot == null || slot->ItemId == 0)
                     continue;
 
-                var itemId = slot->ItemId;
-                if (!Tackle.Contains(itemId) || needed.Contains(itemId))
-                    continue;
-
-                // Nur eine ausdruecklich gesetzte Zielmenge zaehlt hier. Die
-                // Voreinstellung gilt fuer Koeder, die man braucht — bei einem
-                // ausgemusterten waere sie ein Grund, Ballast zu behalten.
-                var keep = config.Targets.GetValueOrDefault(itemId, 0);
-
-                if (!left.TryGetValue(itemId, out var inBag))
-                    left[itemId] = inBag = Restock.CountInInventory(itemId);
-
-                var amount = (int)slot->Quantity;
-                if (inBag - amount < keep)
-                {
-                    keptWhole++;
-                    continue;
-                }
-
-                _queue.Add(new Move(itemId, Restock.ItemName(itemId), type, i, amount, true));
-                left[itemId] = inBag - amount;
+                offers.Add(new StashPlan.Offer(slot->ItemId, (int)slot->Quantity));
+                places.Add((type, i));
             }
         }
 
-        Cap(FreeSlots(true), "free slot(s)", "stay in your bags");
+        return (offers, places);
+    }
+
+    /// <summary>
+    /// Stellt zusammen, was weggeraeumt werden kann.
+    ///
+    /// Weggeraeumt wird nur, was <b>kein Fisch der Liste mehr braucht</b>. Ein
+    /// Ueberschuss ueber die Zielmenge ist kein Grund: Wer dreihundert als Ziel
+    /// hat und vierhundert besitzt, will die hundert im Beutel behalten.
+    ///
+    /// Und nur ganze Stapel, die nicht unter die Zielmenge fuehren.
+    /// </summary>
+    /// <summary>
+    /// Stellt zusammen, was weggeraeumt werden kann.
+    ///
+    /// Die Regel steht in <see cref="StashPlan.Stow"/>; hier wird nur
+    /// aufgezaehlt, was im Beutel liegt, und hinterher wieder auf Faecher
+    /// abgebildet.
+    /// </summary>
+    private int FillStow(Restock restock)
+    {
+        var inv = InventoryManager.Instance();
+        if (inv == null)
+            return 0;
+
+        var needed = NeededIds(restock);
+        var (all, places) = Survey(Bags);
+
+        // Nur Angelzeug kommt in Frage. Alles andere im Beutel geht das Plugin
+        // nichts an.
+        var offers = new List<StashPlan.Offer>();
+        var where = new List<(InventoryType Container, ushort Slot)>();
+        for (var i = 0; i < all.Count; i++)
+        {
+            if (!Tackle.Contains(all[i].ItemId))
+                continue;
+
+            offers.Add(all[i]);
+            where.Add(places[i]);
+        }
+
+        var inBag = new Dictionary<uint, int>();
+        foreach (var offer in offers)
+            inBag.TryAdd(offer.ItemId, Restock.CountInInventory(offer.ItemId));
+
+        // Nur eine ausdruecklich gesetzte Zielmenge zaehlt hier. Die
+        // Voreinstellung gilt fuer Koeder, die man braucht — bei einem
+        // ausgemusterten waere sie ein Grund, Ballast zu behalten.
+        var keep = new Dictionary<uint, int>();
+        foreach (var offer in offers)
+            keep.TryAdd(offer.ItemId, config.Targets.GetValueOrDefault(offer.ItemId, 0));
+
+        var take = StashPlan.Stow(offers, needed, keep, inBag, FreeSlots(true), out var keptWhole);
+
+        foreach (var index in take)
+        {
+            var offer = offers[index];
+            var (container, slot) = where[index];
+            _queue.Add(new Move(offer.ItemId, Restock.ItemName(offer.ItemId),
+                container, slot, offer.Amount, true));
+        }
 
         Running = _queue.Count > 0;
         Status = Running
@@ -521,22 +541,6 @@ internal sealed unsafe class StashTransfer(Configuration config)
         return _queue.Count;
     }
 
-    /// <summary>
-    /// Kuerzt die Warteschlange auf den Platz, der drueben tatsaechlich frei ist.
-    ///
-    /// Siebzig Zuege in ein Lager mit einem freien Fach sind neunundsechzig
-    /// Ablehnungen — und die haben schon einmal die Verbindung gekostet.
-    /// </summary>
-    private void Cap(int room, string what, string fate)
-    {
-        if (_queue.Count <= room)
-            return;
-
-        Plugin.Log.Information(
-            $"[MasterBaiter] {_stash.Name}: only {room} {what}, so {_queue.Count - room} stack(s) {fate}.");
-
-        _queue.RemoveRange(room, _queue.Count - room);
-    }
 
     // ---------- Ausfuehren ----------
 

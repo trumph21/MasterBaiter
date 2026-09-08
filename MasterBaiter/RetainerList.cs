@@ -11,15 +11,15 @@ namespace MasterBaiter;
 /// Ausweichpunkte durch sind. Genau das stand im Protokoll: dreimal ansprechen,
 /// Standpunkt wechseln, wieder dreimal, obwohl die Liste offen war.
 ///
-/// Wie eine Zeile angewaehlt wird, ist nicht geraten, sondern mitgeschnitten:
+/// Der Weg von hier zum Gehilfeninventar:
 ///
-///     RetainerList           ListItemClick        param 1
-///     Talk                   MouseClick           param 0
-///     InventoryRetainerLarge ChildAddonAttached   …
+///     Zeile anwaehlen  ->  Sprechkasten  ->  Auswahlmenue  ->  Inventar
 ///
-/// Bemerkenswert daran ist, was fehlt: kein <c>SelectString</c>. Nach dem
-/// Sprechkasten geht das Inventar unmittelbar auf, der Menuepunkt "Entrust or
-/// withdraw items" entfaellt.
+/// Im Mitschnitt fehlte das Auswahlmenue, und dieser Kommentar behauptete
+/// deshalb eine Weile, es gaebe keines. Es gibt eines — es meldet sich beim
+/// Anklicken nur nicht ueber den Weg, den der Mitschnitt beobachtet.
+///
+/// Ein Mitschnitt zeigt, was er sieht, nicht was es gibt.
 /// </summary>
 internal static unsafe class RetainerList
 {

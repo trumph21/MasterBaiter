@@ -97,8 +97,41 @@ internal sealed unsafe class MarketBoard(Configuration config, Restock restock)
     }
 
     /// <summary>Koeder, die hier in Frage kommen: gebraucht, aber nirgends zu kaufen.</summary>
-    public static IEnumerable<Restock.Row> Candidates(IEnumerable<Restock.Row> rows, VendorIndex vendors)
-        => rows.Where(r => !r.Ignored && r.Missing > 0 && vendors.For(r.BaitId).Count == 0);
+    /// <summary>
+    /// Wie lange ein "nichts gelistet" gilt.
+    ///
+    /// Kurz gehalten, weil die Auskunft unsicher ist: Ein leeres Ergebnis und
+    /// eine unbeantwortete Abfrage sehen von aussen gleich aus. Drei Stunden
+    /// sparen die Wiederholung innerhalb eines Abends, ohne einen Koeder lange
+    /// auszusperren, der doch angeboten wird.
+    /// </summary>
+    private static readonly TimeSpan UnlistedFor = TimeSpan.FromHours(3);
+
+    /// <summary>Gilt der Vermerk "nichts gelistet" fuer diesen Koeder noch?</summary>
+    public bool RecentlyUnlisted(uint baitId) =>
+        config.Unlisted.TryGetValue(baitId, out var when) && DateTime.Now - when < UnlistedFor;
+
+    /// <summary>Wann zuletzt nichts zu finden war, falls das der Fall ist.</summary>
+    public DateTime? UnlistedSince(uint baitId) =>
+        config.Unlisted.TryGetValue(baitId, out var when) ? when : null;
+
+    /// <summary>Vergisst alle Vermerke, damit sich niemand daran festbeisst.</summary>
+    public void ForgetUnlisted()
+    {
+        if (config.Unlisted.Count == 0)
+            return;
+
+        Plugin.Log.Information(
+            $"[MasterBaiter] Forgetting {config.Unlisted.Count} \"nothing listed\" note(s).");
+
+        config.Unlisted.Clear();
+        config.Save();
+    }
+
+    public IEnumerable<Restock.Row> Candidates(IEnumerable<Restock.Row> rows, VendorIndex vendors)
+        => rows.Where(r => !r.Ignored && r.Missing > 0
+                           && vendors.For(r.BaitId).Count == 0
+                           && !RecentlyUnlisted(r.BaitId));
 
     public void Start(IEnumerable<Restock.Row> rows, VendorIndex vendors)
     {
@@ -111,6 +144,15 @@ internal sealed unsafe class MarketBoard(Configuration config, Restock restock)
 
         foreach (var r in Candidates(rows, vendors))
             _queue.Add(r.BaitId);
+
+        var skipped = rows.Count(r => !r.Ignored && r.Missing > 0
+                                      && vendors.For(r.BaitId).Count == 0
+                                      && RecentlyUnlisted(r.BaitId));
+
+        if (skipped > 0)
+            Plugin.Log.Information(
+                $"[MasterBaiter] Market board: {skipped} bait(s) skipped, nothing was listed for " +
+                "them within the last few hours.");
 
         Running = _queue.Count > 0;
         Status = Running ? $"{_queue.Count} baits queued." : "Nothing to buy here.";
@@ -251,6 +293,12 @@ internal sealed unsafe class MarketBoard(Configuration config, Restock restock)
             // In der Tabelle als "none listed" vermerken. Ohne das steht dort
             // weiter ein Strich, und man fragt sich, ob ueberhaupt gesucht wurde.
             _quotes[baitId] = new Quote(0, 0, DateTime.Now);
+
+            // Und ueber den Lauf hinaus merken, damit der naechste nicht
+            // wieder fuenf Sekunden auf dieselbe Leere wartet.
+            config.Unlisted[baitId] = DateTime.Now;
+            config.Save();
+
             _queue.RemoveAt(0);
             _requestedFor = 0;
             _settledAt = 0;
@@ -276,6 +324,10 @@ internal sealed unsafe class MarketBoard(Configuration config, Restock restock)
         // Genau dann ist er naemlich interessant: Er sagt, wie weit die
         // Preisgrenze danebenliegt.
         _quotes[baitId] = new Quote(Cheapest(proxy, baitId), count, DateTime.Now);
+
+        // Es gibt wieder Angebote: Der Vermerk hat sich erledigt.
+        if (config.Unlisted.Remove(baitId))
+            config.Save();
 
         // Was noch ausgegeben werden darf. Beides zaehlt: die Obergrenze fuer
         // den Durchlauf und das Gil, das tatsaechlich da ist.

@@ -1,0 +1,311 @@
+using System.Numerics;
+using Dalamud.Bindings.ImGui;
+
+namespace MasterBaiter;
+
+/// <summary>
+/// Der Reiter "Options".
+///
+/// Teil von <see cref="MainWindow"/>. Die Datei war auf zweitausend Zeilen
+/// gewachsen und enthielt vier Reiter, die Vorschau und ein Dutzend Helfer —
+/// zum Nachschlagen zu viel auf einmal. Aufgeteilt, nicht umgebaut: Es ist
+/// dieselbe Klasse, nur in lesbaren Stuecken.
+/// </summary>
+internal sealed partial class MainWindow
+{
+    private void DrawOptionsTab()
+    {
+        Section("Stock levels");
+        ImGui.TextDisabled("A lure costs a thousand times what a bait does, so they count separately.");
+        ImGui.Spacing();
+
+        ImGui.SetNextItemWidth(140);
+        var target = _config.DefaultTarget;
+        if (ImGui.InputInt("Bait target", ref target))
+        {
+            _config.DefaultTarget = Math.Clamp(target, 0, 9999);
+            _config.Save();
+            _restock.Refresh();
+        }
+
+        ImGui.SetNextItemWidth(140);
+        var lureTarget = _config.DefaultLureTarget;
+        if (ImGui.InputInt("Lure target", ref lureTarget))
+        {
+            _config.DefaultLureTarget = Math.Clamp(lureTarget, 0, 9999);
+            _config.Save();
+            _restock.Refresh();
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip($"{Tackle.LureCount} fishing tackle items count as lures.");
+
+        var countSaddle = _config.CountSaddlebag;
+        if (ImGui.Checkbox("Count what is in your saddlebag", ref countSaddle))
+        {
+            _config.CountSaddlebag = countSaddle;
+            _config.Save();
+            _restock.Refresh();
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(string.Join(Environment.NewLine,
+                "Bait in your saddlebag counts towards the target, so it is not bought twice.",
+                "Off: what is in your saddlebag is ignored.",
+                "Counted only after you have opened it once — " +
+                (_restock.SaddlebagSeen is { } seenAt
+                    ? $"last look {Ago(seenAt)}."
+                    : "not counted yet."),
+                "The saddlebag opens anywhere."));
+
+        var countRetainers = _config.CountRetainers;
+        if (ImGui.Checkbox("Count what your retainers hold", ref countRetainers))
+        {
+            _config.CountRetainers = countRetainers;
+            _config.Save();
+            _restock.Refresh();
+        }
+        if (ImGui.IsItemHovered())
+        {
+            // Beide Schalter tun dasselbe an verschiedenen Orten, also sagen
+            // sie es auch im selben Bau: was es bewirkt, was Aus bedeutet, was
+            // schon gezaehlt ist, und wie man drankommt. Was sich unterscheidet,
+            // faellt dann von selbst auf.
+            var (total, seen) = _retainers.Coverage();
+            ImGui.SetTooltip(string.Join(Environment.NewLine,
+                "Bait with your retainers counts towards the target, so it is not bought twice.",
+                "Off: what your retainers hold is ignored.",
+                "Counted only after you have opened them once — " +
+                (total > 0
+                    ? $"{seen} of {total} done."
+                    : seen > 0 ? $"{seen} counted so far." : "none counted yet."),
+                "A retainer needs a summoning bell."));
+        }
+
+        Section("Market board");
+        ImGui.TextDisabled("Prices here are set by players, not by the game, so both limits always apply.");
+        ImGui.Spacing();
+
+        var useMarket = _config.UseMarketBoard;
+        if (ImGui.Checkbox("Buy from the market board", ref useMarket))
+        {
+            _config.UseMarketBoard = useMarket;
+            _config.Save();
+        }
+
+        using (ImRaiiDisabled(!_config.UseMarketBoard))
+        {
+            ImGui.SetNextItemWidth(140);
+            var maxUnit = _config.MarketMaxUnitPrice;
+            if (ImGui.InputInt("Max gil per item", ref maxUnit))
+            {
+                _config.MarketMaxUnitPrice = Math.Clamp(maxUnit, 1, 99999999);
+                _config.Save();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Listings above this price per item are left alone.");
+
+            ImGui.SetNextItemWidth(140);
+            var maxRun = _config.MarketMaxGilPerRun;
+            if (ImGui.InputInt("Max gil per run", ref maxRun))
+            {
+                _config.MarketMaxGilPerRun = Math.Clamp(maxRun, 1, 999999999);
+                _config.Save();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("The run stops once it has spent this much.");
+        }
+
+        ImGui.TextDisabled("A stack larger than what you are missing is never bought, at any price.");
+
+        Section("Bait list");
+        var showAll = _config.ShowAllTackle;
+        if (ImGui.Checkbox("Show all fishing tackle", ref showAll))
+        {
+            _config.ShowAllTackle = showAll;
+            _config.Save();
+            _restock.Refresh();
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Lists every bait and lure in the game, not just the ones your fish need." +
+                             Environment.NewLine +
+                             "The extra ones start at target 0 and are never bought until you set one.");
+
+        var onlyEnabled = _config.OnlyEnabledLists;
+        if (ImGui.Checkbox("Only lists enabled in GatherBuddy", ref onlyEnabled))
+        {
+            _config.OnlyEnabledLists = onlyEnabled;
+            _config.Save();
+            _restock.Refresh();
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Off: every list is counted, including the ones you switched off there.");
+
+        Section("Travel");
+        ImGui.SetNextItemWidth(140);
+        var pacing = _config.PacingPercent;
+        if (ImGui.InputInt("Speed %", ref pacing, 10))
+        {
+            _config.PacingPercent = Math.Clamp(pacing, 10, 400);
+            _config.Save();
+            Pacing.Percent = _config.PacingPercent;
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("How long the plugin waits between actions, as a percentage." + Environment.NewLine +
+                             "100 is the default, 50 is twice as brisk, 200 twice as leisurely." +
+                             Environment.NewLine +
+                             "Going much below 50 makes the game miss steps: windows need a moment to fill.");
+
+        var buyOnArrival = _config.BuyOnArrival;
+        if (ImGui.Checkbox("Buy on arrival", ref buyOnArrival))
+        {
+            _config.BuyOnArrival = buyOnArrival;
+            _config.Save();
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("After travelling, start buying as soon as the shop opens.");
+
+        var useSprint = _config.UseSprint;
+        if (ImGui.Checkbox("Use Sprint", ref useSprint))
+        {
+            _config.UseSprint = useSprint;
+            _config.Save();
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Uses Sprint whenever it is off cooldown, but only while the plugin is " +
+                             "travelling." + Environment.NewLine +
+                             "Not while you are playing yourself, in combat or mounted.");
+
+        var useMount = _config.UseMount;
+        if (ImGui.Checkbox("Use a mount", ref useMount))
+        {
+            _config.UseMount = useMount;
+            _config.Save();
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(
+                "Calls a mount when the way is long enough to be worth the two seconds it takes." +
+                Environment.NewLine +
+                "Whether mounting is allowed here is the game's answer, not a list of mine: " +
+                "in cities" + Environment.NewLine +
+                "and instances it refuses, and then the character walks.");
+
+        using (ImRaiiDisabled(!_config.UseMount))
+        {
+            var useFlight = _config.UseFlight;
+            if (ImGui.Checkbox("Fly where you can", ref useFlight))
+            {
+                _config.UseFlight = useFlight;
+                _config.Save();
+            }
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(
+                "Flies in zones whose aether currents you have collected, which makes the route " +
+                "a line" + Environment.NewLine +
+                "instead of a walk around the scenery. Everywhere else it stays on the ground." +
+                Environment.NewLine +
+                "Needs a mount, so it follows the switch above." + Environment.NewLine +
+                "Off by default: the check is sound but untested, and a flight path in a zone " +
+                "you cannot" + Environment.NewLine +
+                "fly in ends with the character standing underneath its destination.");
+
+        var helpers = _travel.MissingHelpers();
+        ImGui.TextDisabled(helpers.Count == 0
+            ? "vnavmesh and Lifestream are both present."
+            : $"Missing: {string.Join(" and ", helpers)}.");
+
+        Section("Cosmic Exploration");
+        ImGui.TextDisabled("No aetheryte goes there. The way is Drivingway, the Moon Rover in Mare Lamentorum.");
+        ImGui.Spacing();
+
+        var planets = CosmicPlanet.FromSheet();
+        ImGui.SetNextItemWidth(200);
+        if (ImGui.BeginCombo("Planet", _config.CosmicPlanet))
+        {
+            foreach (var planet in planets)
+            {
+                if (ImGui.Selectable(planet, planet == _config.CosmicPlanet))
+                {
+                    _config.CosmicPlanet = planet;
+                    _config.Save();
+                }
+            }
+
+            ImGui.EndCombo();
+        }
+
+        if (_cosmic.Running)
+        {
+            if (ImGui.Button("Stop"))
+                _cosmic.Stop("Stopped.");
+        }
+        else
+        {
+            using (ImRaiiDisabled(!_cosmic.GateKnown || _travel.Running || !_travel.Available))
+            {
+                if (ImGui.Button($"Travel to {_config.CosmicPlanet}"))
+                    _cosmic.Start();
+            }
+        }
+
+        var autoPlanet = _config.AutoSelectPlanet;
+        if (ImGui.Checkbox("Pick the planet automatically", ref autoPlanet))
+        {
+            _config.AutoSelectPlanet = autoPlanet;
+            _config.Save();
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Off: the window stays open and you click the planet and Blast Off yourself. " +
+                             "The plugin does everything before and after.");
+
+        if (_cosmic.GateIsLearned)
+        {
+            ImGui.SameLine();
+            if (ImGui.Button("Forget NPC"))
+                _cosmic.ForgetGate();
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Drop the remembered NPC and go back to the built-in one.");
+        }
+
+        ImGui.SameLine();
+        ImGui.TextDisabled(_cosmic.GateIsLearned
+            ? $"via {_cosmic.GateName} (remembered)"
+            : $"via {_cosmic.GateName}");
+
+        if (_cosmic.Status.Length > 0)
+        {
+            ImGui.SameLine();
+            ImGui.TextUnformatted(_cosmic.Status);
+        }
+
+        Section("Interface");
+        var chat = _config.ChatFeedback;
+        if (ImGui.Checkbox("Report in chat", ref chat))
+        {
+            _config.ChatFeedback = chat;
+            _config.Save();
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("One line in the game chat when a run or a route finishes." +
+                             Environment.NewLine +
+                             "Only you see it. Everything else stays in /xllog.");
+
+        var honey = _config.HoneyTheme;
+        if (ImGui.Checkbox("Y E L L O W theme", ref honey))
+        {
+            _config.HoneyTheme = honey;
+            _config.Save();
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Tints this window honey yellow." + Environment.NewLine +
+                             "Off: it follows your Dalamud style like every other window.");
+    }
+
+    /// <summary>Ueberschrift eines Abschnitts im Einstellungsreiter.</summary>
+    private void Section(string title)
+    {
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.TextColored(_config.HoneyTheme ? Honey : new Vector4(0.6f, 0.8f, 1f, 1f), title);
+        ImGui.Spacing();
+    }
+}

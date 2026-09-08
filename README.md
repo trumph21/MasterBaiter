@@ -315,6 +315,35 @@ MIT — see [LICENSE](LICENSE).
 
 ## Changelog
 
+### 0.5.2
+
+**"Nothing listed" is remembered for three hours.** Asking the market board
+about a bait costs a five second deadline, two attempts and a three second gap
+to the next question. Asking again about a bait nobody has offered all evening
+buys nothing. The note survives a reload, is dropped the moment listings appear
+again, shows in the price column with its age, and can be cleared from the Debug
+tab.
+
+Three hours and not longer, because the answer is uncertain: an empty result and
+an unanswered query look the same from outside.
+
+**Fetching stops once the gap is covered.** Three stacks in a retainer and
+twelve bait missing meant all three came over — `room` was worked out and then
+never read, left behind when the oversize rule went in 0.5.1. The stack that
+covers the gap may still exceed it; a second one after that is only ballast.
+
+**The rules that move your items are testable now.** Which stacks move is the
+one part of this plugin that can do something wrong rather than nothing, and all
+three causes of the two disconnects sat in that calculation. It is a separate
+class without any game access, with eleven tests holding the cases that cost
+time: 504 against a target of 300, the same 504 in two stacks, four stacks
+sharing one floor, and the room limit itself.
+
+**Also:** `MainWindow.cs` had grown to 1984 lines and is now five files that
+are the same class, split and not rewritten.
+
+---
+
 ### 0.5.1
 
 **Oversized stacks are fetched too.** 288 Squid Strip in the bags, 79 with a
