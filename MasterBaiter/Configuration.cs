@@ -73,6 +73,18 @@ internal sealed class Configuration : IPluginConfiguration
     /// </summary>
     public uint PreferredMarketTerritory { get; set; }
 
+    /// <summary>
+    /// Die ausfuehrliche Spur im Protokoll: jeder Zustandswechsel, jedes
+    /// Fenster, jeder Knopfdruck.
+    ///
+    /// An, weil jede Fehlersuche in diesem Plugin bisher damit begann, dass
+    /// die entscheidende Zeile fehlte — und ein Protokoll, das man erst
+    /// einschaltet, nachdem etwas schiefging, hilft beim naechsten Mal und
+    /// nicht bei diesem. Es sind Uebergaenge, keine Frames: ein ganzer
+    /// Routenlauf kostet ein paar hundert Zeilen.
+    /// </summary>
+    public bool DetailedLog { get; set; } = true;
+
     /// <summary>Nach der Reise von allein kaufen, sobald der Laden offen ist.</summary>
     public bool BuyOnArrival { get; set; } = true;
 

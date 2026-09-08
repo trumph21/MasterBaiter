@@ -43,7 +43,10 @@ internal sealed partial class MainWindow
     private void DrawActionBar()
     {
         if (ImGui.Button("Refresh"))
+        {
+            Trace.Pressed("Refresh");
             _restock.Refresh();
+        }
 
         ImGui.SameLine();
 
@@ -88,7 +91,10 @@ internal sealed partial class MainWindow
                                   || _sweep.Running || _market.Running || !_travel.Available))
             {
                 if (ImGui.Button(plan.Count > 0 ? $"Run route ({plan.Count} stops)" : "Run route"))
+                {
+                    Trace.Pressed($"Run route, {plan.Count} stop(s)");
                     _route.Start();
+                }
             }
             if (plan.Count > 0 && ImGui.IsItemHovered())
             {
@@ -146,7 +152,10 @@ internal sealed partial class MainWindow
             using (ImRaiiDisabled(runBlocker != null || _stash.Running || _visit.Running))
             {
                 if (ImGui.Button("Sort Bait Storage"))
+                {
+                    Trace.Pressed("Sort Bait Storage");
                     _retainerRun.Start();
+                }
             }
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
                 ImGui.SetTooltip(runBlocker ??

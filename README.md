@@ -315,6 +315,32 @@ MIT — see [LICENSE](LICENSE).
 
 ## Changelog
 
+### 0.5.5
+
+**The log follows the whole run now.** Every failure in this plugin looks
+identical from the outside: the character stands still. Whether it is waiting
+for a window, for a path, for the market board or for nothing at all was not in
+the log, and every hunt this month began by guessing which step had stalled.
+
+Written down now: the state of all nine moving parts, seven windows opening and
+closing, the zone you are in, what currencies you hold and whether that number
+was read or remembered, how many bag slots are free, the route plan whenever it
+comes out different, what a refresh found missing, your settings, and which
+button you pressed.
+
+Two things make it readable rather than a flood. It is built as an **observer**:
+one class reports the state of everything each frame and only writes when
+something changed, so there is exactly one line per transition instead of sixty
+per second. And no part of the plugin knows it exists — spreading a dozen log
+lines through eight classes gives you eight classes half made of logging that
+still miss the one transition nobody wrote down.
+
+It writes at Information and not Debug, because Dalamud filters Debug out by
+default and a log you have to enable after something went wrong helps with the
+next one, not this one. On by default, with a switch under Debug.
+
+---
+
 ### 0.5.4
 
 A pass over the whole plugin against its own list of past mistakes, using each

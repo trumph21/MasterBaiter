@@ -167,7 +167,7 @@ internal sealed class Restock(Configuration config, BaitTable baits, GatherList 
     public int CountInSaddlebag(uint itemId) => config.Saddlebag.GetValueOrDefault(itemId);
 
     /// <summary>Die vier Beutel, die das Spiel als Inventar fuehrt.</summary>
-    private static readonly InventoryType[] Bags =
+    internal static readonly InventoryType[] Bags =
     [
         InventoryType.Inventory1, InventoryType.Inventory2,
         InventoryType.Inventory3, InventoryType.Inventory4,
@@ -297,6 +297,20 @@ internal sealed class Restock(Configuration config, BaitTable baits, GatherList 
         Rows = rows;
         Status = null;
         AnnotateShop();
+
+        // Woraus die Tabelle besteht. Ohne diese Zeile ist im Protokoll nicht
+        // zu sehen, ob ein Koeder fehlte, weil nichts fehlt, oder weil er gar
+        // nicht in der Liste stand.
+        var missing = rows.Count(r => !r.Ignored && r.Missing > 0);
+        Trace.Say($"Refreshed: {rows.Count} row(s), {rows.Count(r => r.Needed)} needed by a fish, " +
+                  $"{missing} short by {rows.Where(r => !r.Ignored).Sum(r => r.Missing)} item(s), " +
+                  $"{rows.Count(r => r.Ignored)} ignored.");
+
+        if (missing > 0)
+            Trace.Say("Short: " + string.Join(", ", rows
+                .Where(r => !r.Ignored && r.Missing > 0)
+                .Take(30)
+                .Select(r => $"{r.Name} {r.Missing} (bag {r.Bag}, total {r.Have}, target {r.Target})")));
     }
 
     /// <summary>

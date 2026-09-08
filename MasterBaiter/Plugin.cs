@@ -54,6 +54,9 @@ public sealed class Plugin : IDalamudPlugin
     private readonly Travel _travel;
     private readonly Route _route;
 
+    /// <summary>Schreibt jeden Zustandswechsel mit. Siehe <see cref="Trace"/>.</summary>
+    private readonly Watch _watch;
+
     public Plugin(IDalamudPluginInterface pluginInterface)
     {
         pluginInterface.Create<Services>();
@@ -122,6 +125,13 @@ public sealed class Plugin : IDalamudPlugin
         };
 
         _vendors = vendors;
+
+        // Die Spur zuerst scharfstellen, dann der Rest: Was beim Aufbau
+        // schiefgeht, soll schon im Protokoll stehen.
+        Trace.Detailed = _config.DetailedLog;
+        _watch = new Watch(_config, restock, _travel, _route, _queue, _sweep, _market,
+            _stash, _visit, _retainerRun, _cosmic) { Vendors = vendors };
+        _watch.Settings();
         // Auf dem Planeten angekommen: zum naechsten Haendler laufen, der etwas
         // Fehlendes fuehrt. Ein Teleport ist dort weder noetig noch moeglich,
         // die Reise beschraenkt sich also aufs Laufen.
@@ -184,6 +194,7 @@ public sealed class Plugin : IDalamudPlugin
     {
         // Die Teleportliste wird hier gelesen, nicht in der Zeichenroutine:
         // Sie aufzubauen ist ein Eingriff ins Spiel, kein Nachschlagen.
+        _watch.Tick();
         StartPendingPurchase();
         CheckHelpers();
         _cosmic.Tick();

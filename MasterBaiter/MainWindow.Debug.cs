@@ -179,6 +179,28 @@ internal sealed partial class MainWindow
                 Environment.NewLine +
                 "Guessing these has already cost this plugin two wrong answers and one lucky one.");
 
+        Section("Log");
+
+        var detailed = _config.DetailedLog;
+        if (ImGui.Checkbox("Detailed log", ref detailed))
+        {
+            _config.DetailedLog = detailed;
+            _config.Save();
+            Trace.Detailed = detailed;
+            Plugin.Log.Information(
+                $"[MasterBaiter] Detailed log switched {(detailed ? "on" : "off")}.");
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(
+                "Writes every state change to /xllog: which step each part is in, which windows " +
+                "are open," + Environment.NewLine +
+                "which zone you are in, what you hold, how much room is left, and which button " +
+                "you pressed." + Environment.NewLine +
+                "Transitions only, not frames — a whole route run is a few hundred lines." +
+                Environment.NewLine +
+                "On by default: a log you switch on after something went wrong helps with the " +
+                "next one, not this one.");
+
         Section("Forget");
 
         if (ImGui.Button("Forget market board results"))
@@ -229,7 +251,10 @@ internal sealed partial class MainWindow
         using (ImRaiiDisabled(busy || fetchBlocker != null))
         {
             if (ImGui.Button($"Withdraw Bait from {stash.Name}"))
+            {
+                Trace.Pressed($"Withdraw Bait from {stash.Name}");
                 _stash.Start(_restock, stash);
+            }
         }
         // Auch im ausgegrauten Zustand: Gerade dann steht im Hinweistext,
         // warum der Knopf nicht geht — und gerade dann fragt man danach.
@@ -245,7 +270,10 @@ internal sealed partial class MainWindow
         using (ImRaiiDisabled(busy || stowBlocker != null))
         {
             if (ImGui.Button($"Deposit Bait in {stash.Name}"))
+            {
+                Trace.Pressed($"Deposit Bait in {stash.Name}");
                 _stash.StartStow(_restock, stash);
+            }
         }
         if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
             ImGui.SetTooltip(stowBlocker ??

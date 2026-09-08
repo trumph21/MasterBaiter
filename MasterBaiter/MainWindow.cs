@@ -273,6 +273,16 @@ internal sealed partial class MainWindow : Window
 
         _planAt = now + 1000;
         _plan = _restock.Rows.Count > 0 && _vendors.Ready ? _route.Plan() : [];
+
+        // Der Plan wird jede Sekunde neu gerechnet, aendert sich aber selten.
+        // Als beobachteter Zustand steht er genau dann im Protokoll, wenn er
+        // anders ausfaellt als vorher — und das ist die Frage, die man
+        // hinterher stellt: Warum war dieser Halt gestern dabei und heute nicht?
+        Trace.Change("Route plan", _plan.Count == 0
+            ? "nothing to do"
+            : string.Join(" | ", _plan.Select(s => $"{s.Vendor.Npc} ({s.Vendor.Zone}): " +
+                                                   string.Join(", ", s.Baits))));
+
         return _plan;
     }
 
