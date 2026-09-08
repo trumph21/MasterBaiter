@@ -315,6 +315,42 @@ MIT — see [LICENSE](LICENSE).
 
 ## Changelog
 
+### 0.5.4
+
+A pass over the whole plugin against its own list of past mistakes, using each
+one as a search pattern rather than a memory. Four things turned up.
+
+**A currency never seen counts as unknown, not as none.** Route planning has
+said since 0.4.3 that "not knowing must not exclude a vendor" — and the function
+it asked never returned "unknown". For any real currency the answer was zero.
+So the Cosmocredit fix of 0.4.3 was only half a fix: a balance once remembered
+survived the zero, a balance never seen still became one. Anyone who set the
+plugin up fresh and had not yet logged in inside Cosmic Exploration had the
+original bug untouched — those stops vanished from the route, silently, which is
+how that bug always presents.
+
+This is the same shape as the retainer run in 0.5.3: a comment stating a rule
+the code underneath does not implement. Twice in one day, both times where the
+intention was written down.
+
+**The stock breakdown sits at Total.** It explains how the total is made up; at
+the bag count it answered a question nobody asks there. And the Bag column had
+**two** tooltips stacked on it, the second silently winning — so the reason for
+its amber number, added in 0.5.1, was never once displayed.
+
+**Two more tooltips nobody could read.** The Cosmic Exploration travel button
+was greyed out with no explanation at all, though the reason is unguessable: the
+Moon Rover NPC must have been spoken to once. And "Fly where you can" ends with
+"Needs a mount, so it follows the switch above" — unreadable in exactly the
+state that sentence describes.
+
+The rest of the list was checked and holds: closed containers, the premium
+saddlebag, the aetheryte list and its crash, trusting a returned `true`, the
+guard that disagrees with its operation, and whether every failure reaches the
+log. A script now checks the whole tree for tooltips stacked on one widget.
+
+---
+
 ### 0.5.3
 
 **The character lands before talking.** vnavmesh flies to within reach of a

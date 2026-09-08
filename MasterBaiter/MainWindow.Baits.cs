@@ -500,8 +500,14 @@ internal sealed partial class MainWindow
                     ImGui.SetTooltip("No fish on your list needs this one.");
             }
 
+            // Die Summe, und darunter woraus sie besteht. Der Breakdown gehoert
+            // hierher und nicht an "Bag": Er erklaert, wie die Gesamtzahl
+            // zustande kommt — an der Beutelzahl beantwortete er eine Frage,
+            // die dort niemand stellt.
             ImGui.TableNextColumn();
             Centered(row.Have.ToString(), row.Missing > 0 ? null : Dim);
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip(StockBreakdown(row));
 
             // Im Beutel: die Zahl, mit der man tatsaechlich angeln kann.
             ImGui.TableNextColumn();
@@ -513,11 +519,12 @@ internal sealed partial class MainWindow
 
             Centered(row.Bag.ToString(),
                 elsewhere ? Wanted : shortInBag > 0 ? null : Dim);
+            // Nur einer. Hier standen zwei SetTooltip hintereinander am selben
+            // Feld, und der zweite gewinnt immer — der Grund fuer die gelbe
+            // Zahl war deshalb nie zu sehen.
             if (elsewhere && ImGui.IsItemHovered())
                 ImGui.SetTooltip($"{shortInBag} of these are not in your bags — " +
                                  "you own them, but you cannot fish with them there.");
-            if (ImGui.IsItemHovered())
-                ImGui.SetTooltip(StockBreakdown(row));
 
             // Zwanzig Eingabekaesten untereinander waren das lauteste in der
             // Tabelle, und ihre Zahl stand als einzige links, waehrend die
@@ -680,7 +687,7 @@ internal sealed partial class MainWindow
                             if (ImGui.SmallButton("Go"))
                                 _travel.Start(destination);
                         }
-                        if (ImGui.IsItemHovered())
+                        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
                             ImGui.SetTooltip($"Teleport to {destination.AetheryteName} and walk to the market board.");
                     }
                     else if (other.Count > 0)

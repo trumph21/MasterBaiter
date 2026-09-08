@@ -199,7 +199,7 @@ internal sealed partial class MainWindow
                 _config.Save();
             }
         }
-        if (ImGui.IsItemHovered())
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
             ImGui.SetTooltip(
                 "Flies in zones whose aether currents you have collected, which makes the route " +
                 "a line" + Environment.NewLine +
@@ -249,6 +249,16 @@ internal sealed partial class MainWindow
                 if (ImGui.Button($"Travel to {_config.CosmicPlanet}"))
                     _cosmic.Start();
             }
+            // Ein grauer Knopf ohne Hinweistext sagt nur, dass er nicht geht.
+            // Der Grund ist hier nicht zu erraten: Der Fahrzeug-NPC steht in
+            // keiner Tabelle und muss einmal angesprochen worden sein.
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+                ImGui.SetTooltip(!_cosmic.GateKnown
+                    ? "The Moon Rover NPC is not known yet." + Environment.NewLine +
+                      "Talk to Drivingway in Mare Lamentorum once and the way is remembered."
+                    : !_travel.Available
+                        ? "vnavmesh or Lifestream is missing."
+                        : $"Teleport to Bestways Burrow and ride to {_config.CosmicPlanet}.");
         }
 
         var autoPlanet = _config.AutoSelectPlanet;

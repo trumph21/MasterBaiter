@@ -106,7 +106,21 @@ internal static class Wallet
             return live;
         }
 
-        return Remembered(id.Value) ?? 0;
+        // Nie etwas davon gesehen heisst nicht null, sondern unbekannt — und
+        // wer daraus null macht, sperrt jeden Haendler aus, der diese Waehrung
+        // nimmt. Genau das ist mit den Cosmocredits passiert: Ausserhalb der
+        // Cosmic Exploration lesen sie sich als null, und die Route liess jeden
+        // Halt dort stumm weg.
+        //
+        // Behoben war damals nur die Haelfte: Ein einmal gemerkter Bestand
+        // ueberlebt die Null, ein nie gesehener wurde weiter zu einer. Wer das
+        // Plugin frisch aufsetzt und nie mit offener Cosmic Exploration
+        // eingeloggt war, hatte den alten Fehler unveraendert.
+        //
+        // Die Route rechnet Unbekanntes als unbegrenzt und faehrt hin; ist dort
+        // wirklich nichts, sagt es der Laden laut. Ein falsches "nein" hier
+        // waere still.
+        return Remembered(id.Value);
     }
 
     /// <summary>Wann dieser Bestand zuletzt gesehen wurde.</summary>
