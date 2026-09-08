@@ -21,6 +21,14 @@ internal static unsafe class Mount
     private const uint MountRoulette = 9;
     private const uint FlyingMountRoulette = 24;
 
+    /// <summary>
+    /// Absitzen — aus der Luft heisst das landen.
+    ///
+    /// GeneralAction 23, im selben Blatt nachgeschlagen wie die beiden
+    /// Roulettes.
+    /// </summary>
+    private const uint DismountAction = 23;
+
     /// <summary>Ab dieser Entfernung lohnt das Aufsitzen.</summary>
     private const float WorthMountingDistance = 60f;
 
@@ -80,5 +88,33 @@ internal static unsafe class Mount
         if (manager->UseAction(ActionType.GeneralAction, action))
             Plugin.Log.Information(
                 $"[MasterBaiter] Mounting up ({(action == FlyingMountRoulette ? "flying" : "ground")}).");
+    }
+
+    /// <summary>
+    /// Haengt der Charakter gerade in der Luft?
+    ///
+    /// Zu Pferd auf dem Boden laesst sich ein Haendler ansprechen, im Flug
+    /// nicht — deshalb wird nur der Flug abgefragt und nicht das Reiten. Wer
+    /// jedes Mal absitzt, verliert an jedem Halt eine Sekunde fuer nichts.
+    /// </summary>
+    public static bool Flying => Plugin.Condition[ConditionFlag.InFlight];
+
+    /// <summary>
+    /// Absitzen. Aus der Luft faellt der Charakter dabei zu Boden — das ist der
+    /// Sinn der Sache und kostet keinen Schaden.
+    ///
+    /// Ob es gerade geht, beantwortet wieder das Spiel: In einer Bewegung, im
+    /// Kampf oder waehrend eines Gespraechs ist der Befehl gesperrt.
+    /// </summary>
+    public static bool Dismount()
+    {
+        var manager = ActionManager.Instance();
+        if (manager == null)
+            return false;
+
+        if (manager->GetActionStatus(ActionType.GeneralAction, DismountAction) != 0)
+            return false;
+
+        return manager->UseAction(ActionType.GeneralAction, DismountAction);
     }
 }

@@ -120,28 +120,41 @@ internal static class MarketBoards
     }
 
     /// <summary>
-    /// Das naechstgelegene erreichbare Brett. Eines im aktuellen Gebiet gewinnt,
-    /// dann entscheidet die Entfernung zum Aetheryten — sonst laeuft man in
-    /// Limsa quer durch die Stadt, obwohl eines direkt am Plaza steht.
-    /// </summary>
-    /// <summary>
-    /// Das naechstgelegene Marktbrett.
+    /// Das Marktbrett, an das gefahren wird.
     ///
-    /// <paramref name="from"/> ist das Gebiet, aus dem man kommt — bei einer
-    /// Route das des letzten Halts, nicht das, in dem der Spieler gerade steht.
-    /// Das Brett haengt hinten an; naeher heisst also naeher am Ende der Route.
-    /// Ohne Angabe zaehlt der aktuelle Standort.
+    /// Ist eine Stadt fest gewaehlt, kommen nur ihre Bretter in Frage; welches
+    /// davon, entscheidet weiter die Entfernung zum Aetheryten — in Limsa
+    /// stehen sechs, und quer durch die Stadt zu laufen waere kein Gewinn.
+    ///
+    /// Sonst das naechstgelegene. <paramref name="from"/> ist das Gebiet, aus
+    /// dem man kommt — bei einer Route das des letzten Halts, nicht das, in dem
+    /// der Spieler gerade steht. Das Brett haengt hinten an; naeher heisst also
+    /// naeher am Ende der Route. Ohne Angabe zaehlt der aktuelle Standort.
     /// </summary>
     public static VendorIndex.Vendor? Nearest(Configuration config, VendorIndex vendors, uint from = 0)
     {
         if (!vendors.Ready)
             return null;
 
+        var candidates = All(config, vendors);
+
+        // Eine feste Wahl, die den Halt unmoeglich macht, waere schlechter als
+        // gar keine: Ist dort nichts erreichbar, zaehlen wieder alle.
+        if (config.PreferredMarketTerritory != 0)
+        {
+            var pinned = candidates
+                .Where(b => b.Territory == config.PreferredMarketTerritory && Reach.CanReach(b))
+                .ToList();
+
+            if (pinned.Count > 0)
+                candidates = pinned;
+        }
+
         var here = from != 0 ? from : Plugin.ClientState.TerritoryType;
         VendorIndex.Vendor? best = null;
         var bestScore = float.MaxValue;
 
-        foreach (var board in All(config, vendors))
+        foreach (var board in candidates)
         {
             // Ueber Reach, nicht ueber den Teleportpunkt allein: Ein Brett im
             // Gebiet, in dem man gerade steht, ist erreichbar, auch wenn dorthin

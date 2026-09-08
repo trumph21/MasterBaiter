@@ -50,6 +50,29 @@ internal sealed class Configuration : IPluginConfiguration
     /// </summary>
     public bool UseFlight { get; set; } = false;
 
+    /// <summary>
+    /// Die Glocke, an die immer gefahren wird, als Gebiets-Id. 0 heisst: die
+    /// naechstgelegene.
+    ///
+    /// "Die naechste" ist die bessere Rechnung und trotzdem nicht immer die
+    /// bessere Antwort: Wer seine Gehilfen kennt, weiss, wo er hin will, und
+    /// eine Glocke, die je nach Standort woanders liegt, ist jedes Mal eine
+    /// neue Gegend. Bleibt die gemerkte Glocke unerreichbar, gilt wieder die
+    /// naechstgelegene — eine feste Wahl soll den Gang nicht verhindern.
+    /// </summary>
+    public uint PreferredBellTerritory { get; set; }
+
+    /// <summary>
+    /// Die Stadt, deren Marktbrett benutzt wird, als Gebiets-Id. 0 heisst: das
+    /// naechstgelegene am Ende der Route.
+    ///
+    /// Ueber die Stadt und nicht ueber das einzelne Brett: In Limsa stehen
+    /// sechs, in Gridania sechs, und welches davon am kuerzesten liegt, weiss
+    /// die Entfernungsrechnung besser als der Spieler. Die Frage, die er
+    /// beantworten will, ist "welche Stadt", nicht "welcher Tisch".
+    /// </summary>
+    public uint PreferredMarketTerritory { get; set; }
+
     /// <summary>Nach der Reise von allein kaufen, sobald der Laden offen ist.</summary>
     public bool BuyOnArrival { get; set; } = true;
 

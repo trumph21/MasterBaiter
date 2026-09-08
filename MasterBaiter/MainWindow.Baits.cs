@@ -156,7 +156,12 @@ internal sealed partial class MainWindow
                     "At each one: fetch what your bags are short of, put away what no fish needs " +
                     "any more." + Environment.NewLine +
                     "Retainers left over from a shrunk subscription are skipped without shifting " +
-                    "the rest.");
+                    "the rest." +
+                    // Ein Vorbehalt, kein Hindernis: Er sagt, was dieser Gang
+                    // auslaesst, und nicht, dass es keinen gibt.
+                    (_retainerRun.Caveat() is { } caveat
+                        ? Environment.NewLine + Environment.NewLine + caveat
+                        : string.Empty));
         }
 
         ImGui.SameLine();
@@ -247,47 +252,6 @@ internal sealed partial class MainWindow
                 "Open each one once at a summoning bell and the bait in it counts towards" +
                 Environment.NewLine +
                 "your target, so it is not bought a second time.");
-    }
-
-    /// <summary>
-    /// Die beiden Knoepfe eines Lagers.
-    ///
-    /// Satteltasche und Gehilfe bekommen dieselben zwei, weil sie dasselbe tun.
-    /// Der Unterschied steht im Hinweistext, wenn es einen gibt — etwa, dass
-    /// ein Gehilfe nur an der Rufglocke aufgeht.
-    /// </summary>
-    private void StashButtons(Stash stash, string? fetchBlocker, string? stowBlocker)
-    {
-        var busy = _stash.Running;
-
-        ImGui.SameLine();
-        using (ImRaiiDisabled(busy || fetchBlocker != null))
-        {
-            if (ImGui.Button($"Withdraw Bait from {stash.Name}"))
-                _stash.Start(_restock, stash);
-        }
-        // Auch im ausgegrauten Zustand: Gerade dann steht im Hinweistext,
-        // warum der Knopf nicht geht — und gerade dann fragt man danach.
-        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-            ImGui.SetTooltip(fetchBlocker ??
-                $"Moves bait you are missing out of the {stash.Name.ToLowerInvariant()} and into " +
-                "your bags." + Environment.NewLine +
-                "Whole stacks only: the game moves stacks, not amounts, so one larger than the " +
-                "gap stays" + Environment.NewLine +
-                "unless your bags hold none of it at all.");
-
-        ImGui.SameLine();
-        using (ImRaiiDisabled(busy || stowBlocker != null))
-        {
-            if (ImGui.Button($"Deposit Bait in {stash.Name}"))
-                _stash.StartStow(_restock, stash);
-        }
-        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-            ImGui.SetTooltip(stowBlocker ??
-                "Puts away bait that no fish on your list needs any more." + Environment.NewLine +
-                "Having more than the target is not a reason: that surplus is yours to keep at " +
-                "hand." + Environment.NewLine +
-                "Whole stacks only, and never one that would drop you below the target.");
     }
 
     /// <summary>

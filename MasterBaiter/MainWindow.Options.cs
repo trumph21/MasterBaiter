@@ -112,6 +112,8 @@ internal sealed partial class MainWindow
             }
             if (ImGui.IsItemHovered())
                 ImGui.SetTooltip("The run stops once it has spent this much.");
+
+            DrawMarketChoice();
         }
 
         ImGui.TextDisabled("A stack larger than what you are missing is never bought, at any price.");
@@ -208,6 +210,8 @@ internal sealed partial class MainWindow
                 "you cannot" + Environment.NewLine +
                 "fly in ends with the character standing underneath its destination.");
 
+        DrawBellChoice();
+
         var helpers = _travel.MissingHelpers();
         ImGui.TextDisabled(helpers.Count == 0
             ? "vnavmesh and Lifestream are both present."
@@ -301,6 +305,102 @@ internal sealed partial class MainWindow
     }
 
     /// <summary>Ueberschrift eines Abschnitts im Einstellungsreiter.</summary>
+    /// <summary>
+    /// An welche Rufglocke gefahren wird.
+    ///
+    /// Zur Auswahl steht nur, was gelernt wurde. Ein Gebiet fest einzutragen,
+    /// das der Spieler noch nie besucht hat, hiesse seine Koordinaten zu raten,
+    /// und eine geratene Position schickt den Charakter an eine Wand — dieselbe
+    /// Regel wie bei den Glocken selbst.
+    /// </summary>
+    private void DrawBellChoice() =>
+        DrawCityChoice("Summoning bell", SummoningBells.All(_config, _vendors),
+            _config.PreferredBellTerritory,
+            city =>
+            {
+                _config.PreferredBellTerritory = city;
+                _config.Save();
+            },
+            "Which bell the retainer run travels to.",
+            "No summoning bell known yet. Walk past one and it appears here.");
+
+    /// <summary>
+    /// In welcher Stadt am Marktbrett gekauft wird.
+    ///
+    /// Anders als bei den Glocken ist hier fast alles schon bekannt: Die
+    /// Bretter der Stadtgebiete stehen in einer mitgelieferten Tabelle, offline
+    /// aus den Kartendateien gelesen. Zur Auswahl steht also mehr, als man je
+    /// besucht hat.
+    /// </summary>
+    private void DrawMarketChoice() =>
+        DrawCityChoice("Market board city", MarketBoards.All(_config, _vendors),
+            _config.PreferredMarketTerritory,
+            city =>
+            {
+                _config.PreferredMarketTerritory = city;
+                _config.Save();
+            },
+            "Which city the market board stop uses." + Environment.NewLine +
+            "Which of its boards is up to the distance — Limsa has six, and walking across town " +
+            "is no gain.",
+            "No market board known yet.");
+
+    /// <summary>
+    /// Eine Stadt aus einer Liste von Zielen waehlen, oder "die naechste".
+    ///
+    /// Ueber das Gebiet und nicht ueber den einzelnen Punkt: Sechs Eintraege,
+    /// die alle "Limsa Lominsa Lower Decks" heissen, waeren keine Auswahl.
+    /// </summary>
+    private void DrawCityChoice(string label, List<VendorIndex.Vendor> spots, uint current,
+        Action<uint> choose, string what, string empty)
+    {
+        // Nach Gebiet zusammengefasst, in der Reihenfolge, in der sie kommen.
+        var cities = new List<(uint Territory, string Zone)>();
+        foreach (var spot in spots)
+            if (spot.Zone.Length > 0 && cities.All(c => c.Territory != spot.Territory))
+                cities.Add((spot.Territory, spot.Zone));
+
+        cities.Sort((a, b) => string.CompareOrdinal(a.Zone, b.Zone));
+
+        var chosen = cities.FirstOrDefault(c => c.Territory == current);
+        var preview = chosen.Territory != 0 ? chosen.Zone : "Nearest one";
+
+        ImGui.SetNextItemWidth(260);
+        using (var combo = ImRaiiCombo(label, preview))
+        {
+            if (combo.Open)
+            {
+                if (ImGui.Selectable("Nearest one", current == 0))
+                    choose(0);
+
+                foreach (var city in cities)
+                    if (ImGui.Selectable(city.Zone, city.Territory == current))
+                        choose(city.Territory);
+            }
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(cities.Count == 0
+                ? empty
+                : what + Environment.NewLine +
+                  "\"Nearest one\" picks by distance, so it changes with where you are." +
+                  Environment.NewLine +
+                  "Pick a city and it is always that one — unless nothing there can be reached, " +
+                  "and then the nearest wins after all." + Environment.NewLine +
+                  $"{cities.Count} cities to choose from.");
+    }
+
+    private static ComboScope ImRaiiCombo(string label, string preview) => new(label, preview);
+
+    private readonly struct ComboScope : IDisposable
+    {
+        public bool Open { get; }
+        public ComboScope(string label, string preview) => Open = ImGui.BeginCombo(label, preview);
+        public void Dispose()
+        {
+            if (Open) ImGui.EndCombo();
+        }
+    }
+
     private void Section(string title)
     {
         ImGui.Spacing();

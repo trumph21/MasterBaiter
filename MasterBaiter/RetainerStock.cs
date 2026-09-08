@@ -81,6 +81,23 @@ internal sealed class RetainerStock(Configuration config)
     /// </summary>
     public unsafe void Tick()
     {
+        // Erst wenn das Beutelfenster wirklich offen ist.
+        //
+        // Der aktive Gehilfe wechselt beim Anwaehlen der Zeile, seine Taschen
+        // ein bis zwei Sekunden spaeter. Dazwischen meldet das Spiel den neuen
+        // Namen ueber dem Beutel des alten — im Protokoll stand deshalb einmal
+        // "Noted 27 bait type(s) with Notacloneofmeone", und die 27 gehoerten
+        // dem Gehilfen davor. Es hat sich nach 474 ms selbst berichtigt, weil
+        // dieser Gang lange genug dauerte; ein schnellerer haette den fremden
+        // Bestand im Spielstand stehen lassen. Ein zu hoher Bestand heisst
+        // Fehlmenge zu klein, und dann wird nicht gekauft, was fehlt.
+        //
+        // <c>IsLoaded</c> allein reicht dafuer nicht — geschlossene Faecher
+        // melden es ebenfalls, was diesem Plugin schon dreimal begegnet ist.
+        // Das offene Fenster ist der Beleg, nicht die Kennung dahinter.
+        if (!Stash.Retainer.Ready)
+            return;
+
         var rm = RetainerManager.Instance();
         if (rm == null)
             return;

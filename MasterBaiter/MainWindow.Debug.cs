@@ -17,10 +17,17 @@ internal sealed partial class MainWindow
     /// Werkzeuge, um herauszufinden, warum etwas nicht geht. Ein eigener Reiter,
     /// weil sie keine Einstellungen sind: Wer die Zielmenge aendern will, soll
     /// nicht an vier Knoepfen vorbei, die ins Protokoll schreiben.
+    ///
+    /// Drei Abschnitte, geordnet danach, was ein Knopf anrichtet: nachsehen,
+    /// etwas bewegen, etwas vergessen. Vorher standen alle elf in einer einzigen
+    /// Reihe, die hinter dem rechten Fensterrand endete — ausgerechnet mit
+    /// "Export log" ganz aussen, wonach gefragt wird, wenn etwas schiefging.
     /// </summary>
     private void DrawDebugTab()
     {
-        ImGui.TextDisabled("All of these write to /xllog. Nothing here changes what the plugin does.");
+        Section("Look");
+        ImGui.TextDisabled("These only read, and write what they find to /xllog. " +
+                           "Nothing here moves anything.");
         ImGui.Spacing();
 
         using (ImRaiiDisabled(!_vendors.Ready))
@@ -32,101 +39,8 @@ internal sealed partial class MainWindow
                 Notify("Self-check written to log.");
             }
         }
-        if (ImGui.IsItemHovered())
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
             ImGui.SetTooltip("Check every bait for missing sources or unreachable zones.");
-
-        ImGui.SameLine();
-        using (ImRaiiDisabled(!ShopWindowReader.IsOpen))
-        {
-            if (ImGui.Button("Dump shop"))
-            {
-                ShopWindowReader.DumpToLog();
-                Notify("Shop window written to log.");
-            }
-        }
-        if (ImGui.IsItemHovered())
-            ImGui.SetTooltip("Every entry of the open shop with its purchase index, price and currency.");
-
-        ImGui.SameLine();
-        if (ImGui.Button("Dump windows"))
-        {
-            AddonDump.Run();
-            Notify("Open windows written to log.");
-        }
-        if (ImGui.IsItemHovered())
-            ImGui.SetTooltip("List every visible game window with its raw values. " +
-                             "Useful when something is not recognised.");
-
-        // Schritt eins der Gehilfen-Kette, allein pruefbar: Es bewegt nichts,
-        // es faehrt nur hin und spricht die Glocke an. Was danach kommt —
-        // Gehilfen auswaehlen, Inventar oeffnen, uebertragen — kommt erst,
-        // wenn dieser Teil verlaesslich ist.
-        var bell = SummoningBells.Nearest(_config, _vendors);
-
-        using (ImRaiiDisabled(bell == null || _travel.Running || !_travel.Available))
-        {
-            if (ImGui.Button("Go to summoning bell") && bell is { } destination)
-                _travel.Start(destination);
-        }
-        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-            ImGui.SetTooltip(bell is { } known
-                ? $"Teleport to {known.AetheryteName} and walk to the summoning bell in {known.Zone}."
-                : "No summoning bell known yet." + Environment.NewLine +
-                  "There is no shipped table for them: a guessed position walks the character into " +
-                  "a wall." + Environment.NewLine +
-                  "Walk past one once and it is remembered — every city you visit adds another.");
-
-        // Die vier Einzelschritte, aus der Aktionsleiste hierher gezogen: Sie
-        // sind zum Pruefen da, nicht zum taeglichen Gebrauch. Dafuer gibt es
-        // "Sort Bait Storage".
-        StashButtons(Stash.Saddlebag, _saddleFetch, _saddleStow);
-        StashButtons(Stash.Retainer, _retainerFetch, _retainerStow);
-
-        // Teil zwei der Kette, einzeln pruefbar: eine Zeile anwaehlen und
-        // sehen, ob die richtige aufgeht. Die Zahl ist einstellbar, weil ein
-        // einzelner Mitschnitt nicht verraet, ob "param 1" die erste Zeile mit
-        // Versatz oder die zweite von null gezaehlt ist.
-        using (ImRaiiDisabled(!RetainerList.IsOpen))
-        {
-            ImGui.SetNextItemWidth(70);
-            ImGui.InputInt("##retainerrow", ref _retainerRow);
-            _retainerRow = Math.Clamp(_retainerRow, 0, 9);
-
-            ImGui.SameLine();
-            if (ImGui.Button("Open retainer"))
-                _visit.Start(_retainerRow);
-        }
-
-        ImGui.SameLine();
-        using (ImRaiiDisabled(!Stash.Retainer.Ready && !TopicSelect.IsOpen))
-        {
-            if (ImGui.Button("Leave retainer"))
-                _visit.Leave();
-        }
-        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-            ImGui.SetTooltip("Closes the inventory, picks Quit, clicks through the farewell and " +
-                             "ends back at the list." + Environment.NewLine +
-                             "The way out is the way in, backwards.");
-        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-            ImGui.SetTooltip(RetainerList.IsOpen
-                ? "Selects that row of the open retainer list, counting from zero." +
-                  Environment.NewLine +
-                  "Try 0 and 1 and note which retainer opens — that settles how the parameter " +
-                  "is counted."
-                : "No retainer list open. Use a summoning bell first.");
-
-        ImGui.SameLine();
-        if (ImGui.Button(RetainerRecorder.Listening ? "Stop recording" : "Record retainer windows"))
-            RetainerRecorder.Toggle();
-
-        if (ImGui.IsItemHovered())
-            ImGui.SetTooltip(
-                "Writes down what a real click on the retainer windows looks like: which window," +
-                Environment.NewLine +
-                "which event, which parameter." + Environment.NewLine +
-                "Switch it on, open a bell, pick a retainer, choose the item menu, switch it off." +
-                Environment.NewLine +
-                "Guessing these has already cost this plugin two wrong answers and one lucky one.");
 
         ImGui.SameLine();
         if (ImGui.Button("Explain route"))
@@ -142,18 +56,6 @@ internal sealed partial class MainWindow
                              "A bait that drops out of the route without a reason here is a bug.");
 
         ImGui.SameLine();
-        if (ImGui.Button("Forget market board results"))
-        {
-            _market.ForgetUnlisted();
-            Notify("Market board notes cleared.");
-        }
-        if (ImGui.IsItemHovered())
-            ImGui.SetTooltip("Clears the notes about baits nothing was listed for, so every one is " +
-                             "asked about " +
-                             "again on the next run." + Environment.NewLine +
-                             "They expire after three hours on their own.");
-
-        ImGui.SameLine();
         if (ImGui.Button("Dump currencies"))
         {
             DumpCurrencies();
@@ -167,6 +69,29 @@ internal sealed partial class MainWindow
                              "is not kept where the plugin looks, and the route planning is wrong " +
                              "about that currency.");
 
+        using (ImRaiiDisabled(!ShopWindowReader.IsOpen))
+        {
+            if (ImGui.Button("Dump shop"))
+            {
+                ShopWindowReader.DumpToLog();
+                Notify("Shop window written to log.");
+            }
+        }
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip(ShopWindowReader.IsOpen
+                ? "Every entry of the open shop with its purchase index, price and currency."
+                : "No shop window open. Talk to a vendor first.");
+
+        ImGui.SameLine();
+        if (ImGui.Button("Dump windows"))
+        {
+            AddonDump.Run();
+            Notify("Open windows written to log.");
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("List every visible game window with its raw values. " +
+                             "Useful when something is not recognised.");
+
         ImGui.SameLine();
         if (ImGui.Button("Export log to desktop"))
         {
@@ -179,20 +104,155 @@ internal sealed partial class MainWindow
                              "Only lines from MasterBaiter — other plugins log character names " +
                              "and party data, and those stay out of the file.");
 
-        if (_message.Length > 0 && DateTime.Now < _messageUntil)
-        {
-            ImGui.SameLine();
-            ImGui.TextUnformatted(_message);
-        }
-
+        Section("Bait storage, one step at a time");
+        ImGui.TextDisabled("The steps that \"Sort Bait Storage\" runs in order. " +
+                           "Use them when the whole run stops somewhere.");
         ImGui.Spacing();
-        ImGui.TextDisabled(_vendors.Ready
-            ? $"{Tackle.LureCount} lures known, {_vendors.VendorCount} vendor entries, " +
-              $"{Teleportable.Count} teleport destinations, " +
-              $"{_retainers.Coverage().Seen} of {_retainers.Coverage().Total} retainers counted, " +
-              $"{SummoningBells.KnownCount(_config)} summoning bell(s) known, " +
-              (_restock.SaddlebagRead ? "saddlebag counted." : "saddlebag not counted yet.")
-            : "Building the vendor index...");
+
+        // Schritt eins der Gehilfen-Kette, allein pruefbar: Es bewegt nichts,
+        // es faehrt nur hin und spricht die Glocke an.
+        var bell = SummoningBells.Nearest(_config, _vendors);
+
+        using (ImRaiiDisabled(bell == null || _travel.Running || !_travel.Available))
+        {
+            if (ImGui.Button("Go to summoning bell") && bell is { } destination)
+                _travel.Start(destination);
+        }
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip(bell is { } known
+                ? $"Teleport to {known.AetheryteName} and walk to the summoning bell in {known.Zone}."
+                : "No summoning bell known yet." + Environment.NewLine +
+                  "There is no shipped table for them: a guessed position walks the character into " +
+                  "a wall." + Environment.NewLine +
+                  "Walk past one once and it is remembered — every city you visit adds another.");
+
+        // Schritt zwei, einzeln pruefbar: eine Zeile anwaehlen und sehen, ob die
+        // richtige aufgeht. Die Zahl bleibt einstellbar, weil ein einzelner
+        // Mitschnitt nicht verraet, wie das Spiel die Zeilen zaehlt.
+        ImGui.SameLine();
+        using (ImRaiiDisabled(!RetainerList.IsOpen))
+        {
+            ImGui.SetNextItemWidth(70);
+            ImGui.InputInt("##retainerrow", ref _retainerRow);
+            _retainerRow = Math.Clamp(_retainerRow, 0, 9);
+
+            ImGui.SameLine();
+            if (ImGui.Button("Open retainer"))
+                _visit.Start(_retainerRow);
+        }
+        // Hier hingen einmal zwei Hinweistexte am selben Knopf: Der Text fuer
+        // "Open retainer" stand hinter dem fuer "Leave retainer" und hat ihn
+        // ueberschrieben. Der eine Knopf zeigte den falschen, der andere keinen.
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip(RetainerList.IsOpen
+                ? "Selects that row of the open retainer list, counting from zero."
+                : "No retainer list open. Use a summoning bell first.");
+
+        ImGui.SameLine();
+        using (ImRaiiDisabled(!Stash.Retainer.Ready && !TopicSelect.IsOpen))
+        {
+            if (ImGui.Button("Leave retainer"))
+                _visit.Leave();
+        }
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip("Closes the inventory, picks Quit, clicks through the farewell and " +
+                             "ends back at the list." + Environment.NewLine +
+                             "The way out is the way in, backwards.");
+
+        // Beide Zeilen teilen sich eine Spaltenkante, damit "Deposit" nicht
+        // einmal hier und einmal dort anfaengt: Der laengere der beiden linken
+        // Knoepfe gibt sie vor.
+        var column = Math.Max(WithdrawWidth(Stash.Saddlebag), WithdrawWidth(Stash.Retainer))
+                     + ImGui.GetStyle().ItemSpacing.X;
+
+        StashButtons(Stash.Saddlebag, _saddleFetch, _saddleStow, column);
+        StashButtons(Stash.Retainer, _retainerFetch, _retainerStow, column);
+
+        if (ImGui.Button(RetainerRecorder.Listening ? "Stop recording" : "Record retainer windows"))
+            RetainerRecorder.Toggle();
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(
+                "Writes down what a real click on the retainer windows looks like: which window," +
+                Environment.NewLine +
+                "which event, which parameter." + Environment.NewLine +
+                "Switch it on, open a bell, pick a retainer, choose the item menu, switch it off." +
+                Environment.NewLine +
+                "Guessing these has already cost this plugin two wrong answers and one lucky one.");
+
+        Section("Forget");
+
+        if (ImGui.Button("Forget market board results"))
+        {
+            _market.ForgetUnlisted();
+            Notify("Market board notes cleared.");
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Clears the notes about baits nothing was listed for, so every one is " +
+                             "asked about " +
+                             "again on the next run." + Environment.NewLine +
+                             "They expire after three hours on their own.");
+
+        // Ganz unten, weil beides dasselbe beantwortet: was das Plugin gerade
+        // weiss. Die Rueckmeldung eines Knopfes hat vier Sekunden lang Vorrang
+        // vor dem Dauerzustand.
+        ImGui.Spacing();
+        ImGui.Separator();
+
+        if (_message.Length > 0 && DateTime.Now < _messageUntil)
+            ImGui.TextColored(_config.HoneyTheme ? Honey : new Vector4(0.6f, 0.8f, 1f, 1f), _message);
+        else
+            ImGui.TextDisabled(_vendors.Ready
+                ? $"{Tackle.LureCount} lures known, {_vendors.VendorCount} vendor entries, " +
+                  $"{Teleportable.Count} teleport destinations, " +
+                  $"{_retainers.Coverage().Seen} of {_retainers.Coverage().Total} retainers counted, " +
+                  $"{SummoningBells.KnownCount(_config)} summoning bell(s) known, " +
+                  (_restock.SaddlebagRead ? "saddlebag counted." : "saddlebag not counted yet.")
+                : "Building the vendor index...");
+    }
+
+    /// <summary>Wie breit der "Withdraw"-Knopf dieses Lagers ist.</summary>
+    private static float WithdrawWidth(Stash stash) =>
+        ImGui.CalcTextSize($"Withdraw Bait from {stash.Name}").X + ImGui.GetStyle().FramePadding.X * 2;
+
+    /// <summary>
+    /// Die beiden Einzelschritte eines Lagers, nebeneinander.
+    ///
+    /// Sie standen einmal in der Aktionsleiste; seit "Sort Bait Storage" beides
+    /// in einem Durchlauf erledigt, sind sie nur noch zum Pruefen da und wohnen
+    /// deshalb hier. <paramref name="column"/> ist die gemeinsame Kante fuer den
+    /// rechten Knopf, damit Satteltasche und Gehilfe untereinander stehen.
+    /// </summary>
+    private void StashButtons(Stash stash, string? fetchBlocker, string? stowBlocker, float column)
+    {
+        var busy = _stash.Running;
+
+        using (ImRaiiDisabled(busy || fetchBlocker != null))
+        {
+            if (ImGui.Button($"Withdraw Bait from {stash.Name}"))
+                _stash.Start(_restock, stash);
+        }
+        // Auch im ausgegrauten Zustand: Gerade dann steht im Hinweistext,
+        // warum der Knopf nicht geht — und gerade dann fragt man danach.
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip(fetchBlocker ??
+                $"Moves bait you are missing out of the {stash.Name.ToLowerInvariant()} and into " +
+                "your bags." + Environment.NewLine +
+                "Whole stacks only: the game moves stacks, not amounts, so one larger than the " +
+                "gap stays" + Environment.NewLine +
+                "unless your bags hold none of it at all.");
+
+        ImGui.SameLine(column);
+        using (ImRaiiDisabled(busy || stowBlocker != null))
+        {
+            if (ImGui.Button($"Deposit Bait in {stash.Name}"))
+                _stash.StartStow(_restock, stash);
+        }
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip(stowBlocker ??
+                "Puts away bait that no fish on your list needs any more." + Environment.NewLine +
+                "Having more than the target is not a reason: that surplus is yours to keep at " +
+                "hand." + Environment.NewLine +
+                "Whole stacks only, and never one that would drop you below the target.");
     }
 
     /// <summary>

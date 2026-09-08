@@ -15,7 +15,7 @@ namespace MasterBaiter;
 /// </summary>
 internal sealed class Travel
 {
-    private enum Step { Idle, WaitingToTeleport, Teleporting, WaitingForZone, Aethernet, WaitingForDistrict, Pathfinding, Walking, Interacting, WaitingForShop, Done, Failed }
+    private enum Step { Idle, WaitingToTeleport, Teleporting, WaitingForZone, Aethernet, WaitingForDistrict, Pathfinding, Walking, Landing, Interacting, WaitingForShop, Done, Failed }
 
     private const float ArrivalRange = 3.5f;   // so nah wollen wir an den NPC
 
@@ -31,6 +31,18 @@ internal sealed class Travel
 
     /// <summary>Wie weit die Ausweichpunkte um den NPC herum liegen.</summary>
     private const float ApproachOffset = 2.5f;
+
+    /// <summary>
+    /// Wie oft das Absitzen versucht wird, bevor es trotzdem weitergeht.
+    ///
+    /// Der Befehl ist gesperrt, solange der Charakter noch in einer Bewegung
+    /// steckt; ein zweiter Versuch eine Sekunde spaeter greift dann. Klappt es
+    /// gar nicht, ist Ansprechen immer noch besser als Aufgeben — zu Pferd auf
+    /// dem Boden geht es ja.
+    /// </summary>
+    private const int MaxLandAttempts = 4;
+
+    private const int LandTimeoutMs = 15_000;
 
     /// <summary>
     /// So lange darf der Charakter beim Laufen auf der Stelle stehen, bevor er
@@ -81,6 +93,7 @@ internal sealed class Travel
     private long _movedAt;
     private long _walkStartedAt;
     private long _zoneSettledAt;
+    private int _landAttempts;
 
     /// <summary>Wird ausgeloest, sobald das Haendlerfenster offen ist.</summary>
     public event Action? Arrived;
@@ -495,10 +508,44 @@ internal sealed class Travel
                     $"[MasterBaiter] Walked to {_target.Npc} in " +
                     $"{(Environment.TickCount64 - _walkStartedAt) / 1000.0:0.0} s.");
 
-                Status = $"Talking to {_target.Npc}.";
-                _step = Step.Interacting;
-                _nextActionAt = Pacing.Next(600);
-                _deadline = Environment.TickCount64 + InteractTimeoutMs;
+                // Fliegend laesst sich niemand ansprechen. vnavmesh fliegt bis
+                // auf Reichweite heran und bleibt dort in der Luft stehen; von
+                // dort sah jeder Versuch aus wie ein Haendler, der nicht
+                // antwortet — sechsmal "Talked at 3,5 distance", sechsmal kein
+                // Fenster, danach fuenf Ausweichpunkte. Der Weg war richtig,
+                // nur die Hoehe nicht.
+                Status = $"Landing at {_target.Npc}.";
+                _step = Step.Landing;
+                _landAttempts = 0;
+                _nextActionAt = Pacing.Next(300);
+                _deadline = Environment.TickCount64 + LandTimeoutMs;
+                break;
+
+            case Step.Landing:
+                if (Environment.TickCount64 < _nextActionAt)
+                    return;
+
+                if (!Mount.Flying || _landAttempts >= MaxLandAttempts)
+                {
+                    if (_landAttempts >= MaxLandAttempts && Mount.Flying)
+                        Plugin.Log.Warning(
+                            "[MasterBaiter] Still in the air after " +
+                            $"{MaxLandAttempts} attempts to dismount. Talking anyway.");
+
+                    Status = $"Talking to {_target.Npc}.";
+                    _step = Step.Interacting;
+                    // Nach dem Absitzen faellt der Charakter noch. Wer sofort
+                    // anspricht, spricht im Fallen.
+                    _nextActionAt = Pacing.Next(_landAttempts > 0 ? 1600 : 600);
+                    _deadline = Environment.TickCount64 + InteractTimeoutMs;
+                    return;
+                }
+
+                _landAttempts++;
+                if (Mount.Dismount())
+                    Plugin.Log.Information($"[MasterBaiter] Landing at {_target.Npc}.");
+
+                _nextActionAt = Pacing.Next(900);
                 break;
 
             case Step.Interacting:

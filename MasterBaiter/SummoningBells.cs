@@ -89,19 +89,36 @@ internal static class SummoningBells
     }
 
     /// <summary>
-    /// Die naechstgelegene erreichbare Glocke. Eine im aktuellen Gebiet
-    /// gewinnt, dann entscheidet die Entfernung zum Aetheryten.
+    /// Die Glocke, an die gefahren wird.
+    ///
+    /// Ist eine feste gewaehlt und erreichbar, gewinnt sie ohne Rechnung.
+    /// Sonst die naechstgelegene: Eine im aktuellen Gebiet gewinnt, dann
+    /// entscheidet die Entfernung zum Aetheryten.
     /// </summary>
     public static VendorIndex.Vendor? Nearest(Configuration config, VendorIndex vendors, uint from = 0)
     {
         if (!vendors.Ready)
             return null;
 
+        var candidates = All(config, vendors);
+
+        // Nur wenn dort auch etwas erreichbar ist. Eine feste Wahl, die den
+        // Gang scheitern laesst, waere schlechter als gar keine.
+        if (config.PreferredBellTerritory != 0)
+        {
+            var pinned = candidates
+                .Where(b => b.Territory == config.PreferredBellTerritory && Reach.CanReach(b))
+                .ToList();
+
+            if (pinned.Count > 0)
+                candidates = pinned;
+        }
+
         var here = from != 0 ? from : Plugin.ClientState.TerritoryType;
         VendorIndex.Vendor? best = null;
         var bestScore = float.MaxValue;
 
-        foreach (var bell in All(config, vendors))
+        foreach (var bell in candidates)
         {
             if (!Reach.CanReach(bell))
                 continue;

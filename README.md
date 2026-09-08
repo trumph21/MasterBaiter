@@ -315,6 +315,47 @@ MIT — see [LICENSE](LICENSE).
 
 ## Changelog
 
+### 0.5.3
+
+**The character lands before talking.** vnavmesh flies to within reach of a
+vendor and stops there — in the air. From up there nobody can be spoken to, so
+the plugin talked six times, got no window, and tried five other spots, which in
+mid-air changes nothing. The way was right, the height was not. Now flight is
+followed by a dismount, up to four attempts, then a moment for the fall. On the
+ground it stays mounted, because a mounted character can talk and every needless
+dismount costs a second at every stop.
+
+**Sort Bait Storage no longer stops before it starts.** Two places
+contradicted each other: one said the saddlebag alone is reason enough to set
+off, the other refused the run four lines later when no retainer was listed. But
+before your first summoning bell in a session the game reports no retainers at
+all, whether you have eight or none. Now the saddlebag goes first, then the
+bell, and only once the list is open is an empty list an answer.
+
+**A retainer's bait is noted only while their bag is open.** Selecting the next
+retainer switches the active one immediately; their bags follow a second or two
+later. In between, the game reports the new name over the old bag — the log read
+"Noted 27 bait types with Notacloneofmeone" when those 27 belonged to the
+retainer before. It corrected itself after 474 ms because that run was slow
+enough; a faster one would have left a stranger's stock in your save file. Too
+much stock means too little missing, and then what is missing is not bought.
+
+**New: pick the city.** Options names the summoning bell and the market board
+city, instead of always taking the nearest. Nearest is the better arithmetic and
+still not always the better answer: a bell that moves with you is a new
+neighbourhood every time. The market board is chosen by city, not by board —
+Limsa has six, and which of them is shortest is a question distance answers
+better than you do. Both fall back to the nearest if nothing there can be
+reached: a fixed choice must not be able to stop the run.
+
+**Also:** the Debug tab is sorted into Look, Bait storage and Forget. Eleven
+buttons in one row do not wrap, they run off the window edge, and "Export log to
+desktop" sat furthest out — the one thing asked for when something has gone
+wrong. Two of them shared a single tooltip: "Leave retainer" showed the
+explanation belonging to "Open retainer", which showed none.
+
+---
+
 ### 0.5.2
 
 **"Nothing listed" is remembered for three hours.** Asking the market board

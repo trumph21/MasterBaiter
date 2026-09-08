@@ -92,17 +92,23 @@ internal sealed unsafe class RetainerRun(
         if (!travel.Available)
             return "vnavmesh or Lifestream is missing.";
 
-        // Die Satteltasche allein reicht als Grund loszulaufen — sie braucht
-        // weder Glocke noch Gehilfen.
-        if (OpenableRows().Count == 0 && !RetainerList.IsOpen)
-            return null;
-
-        if (!RetainerList.IsOpen && SummoningBells.Nearest(config, vendors) == null)
-            return "No summoning bell known yet, so only the saddlebag can be sorted." +
-                   Environment.NewLine + "Walk past a bell once and it is remembered.";
-
+        // Mehr steht dem Gang nicht im Weg. Die Satteltasche allein reicht als
+        // Grund loszulaufen — sie braucht weder Glocke noch Gehilfen, und ein
+        // ausgegrauter Knopf hat sie einmal mitgenommen: Der Hinweis sagte
+        // "dann eben nur die Satteltasche", der graue Knopf liess auch die
+        // nicht zu.
         return null;
     }
+
+    /// <summary>
+    /// Was an diesem Gang nicht gehen wird — als Zusatz zum Hinweistext, nicht
+    /// als Grund, den Knopf zu sperren.
+    /// </summary>
+    public string? Caveat() =>
+        !RetainerList.IsOpen && SummoningBells.Nearest(config, vendors) == null
+            ? "No summoning bell known yet, so only the saddlebag is sorted." +
+              Environment.NewLine + "Walk past a bell once and it is remembered."
+            : null;
 
     public void Start()
     {
@@ -117,11 +123,17 @@ internal sealed unsafe class RetainerRun(
         _deadline = Environment.TickCount64 + TimeoutMs;
         _nextAt = 0;
 
+        // Eine leere Liste ist hier kein Grund aufzuhoeren. Sie hiess einmal
+        // "keine Gehilfen" und beendete den Gang, bevor er anfing — auch die
+        // Satteltasche, fuer die gar kein Gehilfe noetig ist. Dabei sagt eine
+        // leere Liste nur, dass das Spiel noch keine herausgegeben hat: Vor der
+        // ersten Rufglocke einer Sitzung zaehlt <c>GetRetainerCount</c> null,
+        // ob man nun acht Gehilfen hat oder keinen. Wer sie hat, erfaehrt es an
+        // der Glocke; bis dahin wird nichts angenommen.
         if (_rows.Count == 0)
-        {
-            Fail("No retainer can be opened.");
-            return;
-        }
+            Plugin.Log.Information(
+                "[MasterBaiter] No retainers listed yet — the saddlebag first, " +
+                "then a bell to find out whether there are any.");
 
         _step = Step.BagFetch;
         Status = "Sorting the saddlebag.";
@@ -130,12 +142,6 @@ internal sealed unsafe class RetainerRun(
     /// <summary>Weiter zu den Gehilfen, oder Schluss.</summary>
     private void AfterSaddlebag(long now)
     {
-        if (_rows.Count == 0)
-        {
-            Finish();
-            return;
-        }
-
         if (RetainerList.IsOpen)
         {
             _step = Step.Opening;
@@ -147,6 +153,8 @@ internal sealed unsafe class RetainerRun(
         {
             // Kein Weg zu den Gehilfen ist kein Fehlschlag, wenn die
             // Satteltasche schon erledigt ist.
+            Plugin.Log.Information(
+                "[MasterBaiter] No summoning bell known, so the retainers are skipped.");
             Finish();
             return;
         }
@@ -237,6 +245,15 @@ internal sealed unsafe class RetainerRun(
                     _step = Step.Fetching;
                     _nextAt = now + StepDelayMs;
                     return;
+                }
+
+                // Die Liste ist offen, also gibt das Spiel jetzt Auskunft. Erst
+                // hier ist eine leere Antwort eine Antwort.
+                if (_rows.Count == 0)
+                {
+                    _rows.AddRange(OpenableRows());
+                    Plugin.Log.Information(
+                        $"[MasterBaiter] The bell lists {_rows.Count} retainer(s) that can be opened.");
                 }
 
                 if (_at >= _rows.Count)
