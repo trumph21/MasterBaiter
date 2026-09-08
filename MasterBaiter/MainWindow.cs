@@ -1598,9 +1598,15 @@ internal sealed class MainWindow : Window
 
             // Im Beutel: die Zahl, mit der man tatsaechlich angeln kann.
             ImGui.TableNextColumn();
+            // Fehlt im Beutel etwas, das anderswo liegt, sagt "Missing" nichts
+            // davon — dort steht null, weil nichts zu kaufen ist. Dann muss es
+            // diese Zahl sagen.
             var shortInBag = row.Target - row.Bag;
-            Centered(row.Bag.ToString(), shortInBag > 0 ? null : Dim);
-            if (shortInBag > 0 && row.Have >= row.Target && ImGui.IsItemHovered())
+            var elsewhere = shortInBag > 0 && row.Have >= row.Target;
+
+            Centered(row.Bag.ToString(),
+                elsewhere ? Wanted : shortInBag > 0 ? null : Dim);
+            if (elsewhere && ImGui.IsItemHovered())
                 ImGui.SetTooltip($"{shortInBag} of these are not in your bags — " +
                                  "you own them, but you cannot fish with them there.");
             if (ImGui.IsItemHovered())

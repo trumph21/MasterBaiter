@@ -315,6 +315,22 @@ MIT — see [LICENSE](LICENSE).
 
 ## Changelog
 
+### 0.5.1
+
+**Oversized stacks are fetched too.** 288 Squid Strip in the bags, 79 with a
+retainer, target 300 — the stack did not fit the gap of twelve, so it stayed
+where it was. That rule existed to stop a to-and-fro: back when putting away
+meant "everything above the target", a fetched stack would have been carried
+straight back. Since putting away means "what no fish needs any more", that
+cannot happen, and the rule only cost.
+
+**The Bag column turns amber when your bags are short of bait you own
+elsewhere.** `Missing` correctly reads zero there — there is nothing to buy —
+so the other number has to say it. The row now catches the eye the same way one
+with a real shortfall does.
+
+---
+
 ### 0.5.0
 
 **Bait can now be moved, not just bought.** `Sort Bait Storage` goes through

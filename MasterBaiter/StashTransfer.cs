@@ -304,12 +304,9 @@ internal sealed unsafe class StashTransfer(Configuration config)
         if (inv == null)
             return "The inventory is not readable right now.";
 
-        var oversized = 0;
-
         foreach (var row in rows)
         {
-            var room = row.Target - row.Bag;
-            if (row.Ignored || room <= 0)
+            if (row.Ignored || row.Target - row.Bag <= 0)
                 continue;
 
             foreach (var type in stash.Containers)
@@ -321,21 +318,13 @@ internal sealed unsafe class StashTransfer(Configuration config)
                 for (ushort i = 0; i < bag->Size; i++)
                 {
                     var slot = bag->GetInventorySlot(i);
-                    if (slot == null || slot->ItemId != row.BaitId)
-                        continue;
-
-                    if ((int)slot->Quantity <= room || row.Bag == 0)
+                    if (slot != null && slot->ItemId == row.BaitId)
                         return null;
-
-                    oversized++;
                 }
             }
         }
 
-        return oversized > 0
-            ? $"{oversized} stack(s) {stash.Into} are larger than the gap in your bags, " +
-              "and the game moves whole stacks only."
-            : $"Nothing {stash.Into} is bait your bags are short of.";
+        return $"Nothing {stash.Into} is bait your bags are short of.";
     }
 
     /// <summary>Warum gerade nichts wegzuraeumen ist, oder null.</summary>
@@ -410,8 +399,6 @@ internal sealed unsafe class StashTransfer(Configuration config)
         if (inv == null)
             return 0;
 
-        var skipped = 0;
-
         foreach (var row in rows)
         {
             // Nach dem Beutel, nicht nach dem Gesamtbestand: Was im Lager
@@ -433,16 +420,18 @@ internal sealed unsafe class StashTransfer(Configuration config)
                     if (slot == null || slot->ItemId != row.BaitId)
                         continue;
 
+                    // Auch ein Stapel, der die Zielmenge ueberschreitet, wird
+                    // geholt.
+                    //
+                    // Frueher blieb er liegen, weil das Wegraeumen damals alles
+                    // ueber der Zielmenge nahm — der Stapel waere sofort
+                    // zurueckgewandert. Seit weggeraeumt wird, was kein Fisch
+                    // mehr braucht, gibt es dieses Hin und Her nicht mehr, und
+                    // die Regel kostete nur noch: 288 Squid Strip im Beutel, 79
+                    // beim Gehilfen, Ziel 300 — der Stapel passte nicht in die
+                    // Luecke von zwoelf und blieb liegen, obwohl er gebraucht
+                    // wurde und niemandem weh tut.
                     var amount = (int)slot->Quantity;
-
-                    // Ein zu grosser Stapel bleibt liegen — ausser der Beutel
-                    // ist leer. Dann ist "zu viel" besser als "keiner".
-                    if (amount > room && row.Bag > 0)
-                    {
-                        skipped++;
-                        continue;
-                    }
-
                     _queue.Add(new Move(row.BaitId, row.Name, type, i, amount, false));
                     room -= amount;
                 }
@@ -455,9 +444,7 @@ internal sealed unsafe class StashTransfer(Configuration config)
         Status = Running ? $"{_queue.Count} stack(s) to fetch." : "Nothing to fetch — your bags are full.";
         _openUntil = 0;
 
-        Plugin.Log.Information(
-            $"[MasterBaiter] {_stash.Name}: {_queue.Count} stack(s) to fetch" +
-            (skipped > 0 ? $", {skipped} left because they are larger than what is missing." : "."));
+        Plugin.Log.Information($"[MasterBaiter] {_stash.Name}: {_queue.Count} stack(s) to fetch.");
 
         return _queue.Count;
     }
