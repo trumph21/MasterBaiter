@@ -85,6 +85,16 @@ internal sealed class Configuration : IPluginConfiguration
     /// </summary>
     public bool DetailedLog { get; set; } = true;
 
+    /// <summary>
+    /// Ragworm, Krill und Plump Worm bleiben im Beutel, auch wenn kein Fisch
+    /// der Sammelliste sie braucht.
+    ///
+    /// An, weil der Schaden einseitig ist: Drei Stapel im Beutel kosten drei
+    /// Faecher, ein fehlender Ozeankoeder kostet die Fahrt. Siehe
+    /// <see cref="OceanFishing"/>.
+    /// </summary>
+    public bool KeepOceanBait { get; set; } = true;
+
     /// <summary>Nach der Reise von allein kaufen, sobald der Laden offen ist.</summary>
     public bool BuyOnArrival { get; set; } = true;
 

@@ -315,6 +315,32 @@ MIT — see [LICENSE](LICENSE).
 
 ## Changelog
 
+### 0.5.7
+
+**Ocean Fishing bait stays in your bags.** Ragworm for the surface, Krill for
+mid-water, Plump Worm for the bottom — those three cover every spot on every
+route, and none of them appears in the gather list, because what bites out there
+depends on route, time and weather rather than on an entry somewhere. To the
+plugin that made them ballast: no fish needs them, so Sort Bait Storage filed
+them with a retainer. Correct by its own rule, and wrong two minutes before the
+ferry, which leaves once every two hours.
+
+They now count as needed and are never stowed. There is a switch under Options
+for anyone who does not sail. They are still not bought or fetched — for that,
+give them a target in the table like any other bait.
+
+The rule sits in one function, the same one the button's tooltip asks, rather
+than as a second exception further down. Twice this week a comment claimed a
+rule that the code beside it did not implement; this seemed a poor place for a
+third.
+
+**The three item ids are tested against the shipped vendor table.** A wrong
+number here would protect some unrelated item from being stowed *and* let the
+real bait go, both silently. The neighbour in the numbering is Versatile Lure,
+which is exactly where a transposed digit lands, so that is asserted too.
+
+---
+
 ### 0.5.6
 
 Three findings, all of them read straight out of the log that 0.5.5 added.

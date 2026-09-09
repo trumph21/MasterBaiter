@@ -80,6 +80,23 @@ internal sealed partial class MainWindow
                 "A retainer needs a summoning bell."));
         }
 
+        var keepOcean = _config.KeepOceanBait;
+        if (ImGui.Checkbox("Keep Ocean Fishing bait", ref keepOcean))
+        {
+            _config.KeepOceanBait = keepOcean;
+            _config.Save();
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(
+                $"{OceanFishing.Names} stay in your bags." + Environment.NewLine +
+                "Sort Bait Storage treats them as needed and never puts them away." +
+                Environment.NewLine +
+                "Ocean Fishing is not in the gather list — what bites there depends on route, " +
+                "time and weather —" + Environment.NewLine +
+                "so without this they look like ballast and go to a retainer. Three stacks cost " +
+                "three slots;" + Environment.NewLine +
+                "missing one two minutes before the ferry costs the trip.");
+
         Section("Market board");
         ImGui.TextDisabled("Prices here are set by players, not by the game, so both limits always apply.");
         ImGui.Spacing();

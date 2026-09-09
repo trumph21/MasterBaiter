@@ -381,12 +381,20 @@ internal sealed unsafe class StashTransfer(Configuration config)
     /// vollstaendige Anzeige ausgeschaltet hat, sieht ausgemusterte Koeder gar
     /// nicht — sie liegen aber trotzdem im Beutel.
     /// </summary>
-    private static HashSet<uint> NeededIds(Restock restock)
+    private HashSet<uint> NeededIds(Restock restock)
     {
         var needed = new HashSet<uint>();
         foreach (var row in restock.Rows)
             if (row.Needed)
                 needed.Add(row.BaitId);
+
+        // Der Ozeanvorrat zaehlt als gebraucht, obwohl ihn kein Fisch der Liste
+        // anfordert. Er steht hier und nicht als eigene Ausnahme weiter unten,
+        // damit Knopf und Ausfuehrung dieselbe Antwort geben: Beide fragen
+        // diese eine Stelle.
+        if (config.KeepOceanBait)
+            foreach (var id in OceanFishing.Baits)
+                needed.Add(id);
 
         return needed;
     }
