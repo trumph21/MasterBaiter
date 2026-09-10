@@ -158,6 +158,17 @@ internal sealed partial class MainWindow
         if (ImGui.IsItemHovered())
             ImGui.SetTooltip("Off: every list is counted, including the ones you switched off there.");
 
+        // Welche Datei gemeint ist, gehoert sichtbar hin. Vier Tage lang wurde
+        // hier ein toter Ordner gelesen, ohne dass etwas fehlschlug — eine
+        // Datei, die es gibt und die sich lesen laesst, sieht nicht falsch aus.
+        var listPath = string.IsNullOrWhiteSpace(_config.GatherListPath)
+            ? GatherList.DefaultPath
+            : _config.GatherListPath;
+
+        DrawListSource(listPath);
+
+        DrawBigFishList();
+
         Section("Travel");
         ImGui.SetNextItemWidth(140);
         var pacing = _config.PacingPercent;
@@ -332,6 +343,149 @@ internal sealed partial class MainWindow
     }
 
     /// <summary>Ueberschrift eines Abschnitts im Einstellungsreiter.</summary>
+    /// <summary>
+    /// Aus welchem Plugin die Sammellisten kommen.
+    ///
+    /// Meist gibt es genau eines, dann ist es eine Anzeige. Wer aber
+    /// GatherBuddy und einen eigenen Bau nebeneinander installiert hat, hat
+    /// zwei Ordner mit Listen darin — und nur einer davon lebt. Vier Tage lang
+    /// las dieses Plugin den toten, ohne dass etwas fehlschlug: Eine Datei, die
+    /// es gibt und die sich lesen laesst, sieht nicht falsch aus. Seitdem steht
+    /// die Wahl hier, sichtbar und aenderbar.
+    /// </summary>
+    private void DrawListSource(string current)
+    {
+        var sources = GatherList.Candidates();
+        var chosen = sources.FirstOrDefault(s => s.Path == current);
+        var preview = chosen.Name is { Length: > 0 }
+            ? chosen.Name + (chosen.Loaded ? string.Empty : " (not loaded)")
+            : Path.GetFileName(Path.GetDirectoryName(current)) ?? "unknown";
+
+        ImGui.SetNextItemWidth(260);
+        using (var combo = ImRaiiCombo("Gather lists from", preview))
+        {
+            if (combo.Open)
+                foreach (var source in sources)
+                {
+                    var label = source.Name + (source.Loaded ? string.Empty : " (not loaded)");
+                    if (!ImGui.Selectable(label, source.Path == current))
+                        continue;
+
+                    // Leer heisst "such es dir selbst": Das ueberlebt eine
+                    // Umbenennung des Baus, ein fester Pfad nicht.
+                    _config.GatherListPath =
+                        sources.Count(s => s.Loaded) <= 1 && source.Loaded ? string.Empty : source.Path;
+
+                    _config.Save();
+                    GatherList.Rediscover();
+                    _restock.Refresh();
+                }
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(current + Environment.NewLine + Environment.NewLine +
+                $"{sources.Count} plugin(s) here keep gather lists. Found by their files, not by " +
+                "name:" + Environment.NewLine +
+                "a custom build is called whatever its author called it, and Dalamud files its " +
+                "settings under that." + Environment.NewLine +
+                "\"Not loaded\" means the folder is left over — its lists are as old as the day you " +
+                "stopped using it.");
+    }
+
+    /// <summary>
+    /// Erzeugt GatherBuddy eine Liste aus den grossen Fischen, die noch im
+    /// Tagebuch fehlen.
+    ///
+    /// Der Knopf schreibt in die Konfiguration eines fremden Plugins, und das
+    /// steht hier auch so. GatherBuddy liest seine Datei nur beim Laden und
+    /// ueberschreibt sie bei jeder eigenen Aenderung aus dem Speicher — wer das
+    /// nicht weiss, sucht die Liste vergeblich oder verliert sie wieder.
+    /// </summary>
+    private void DrawBigFishList()
+    {
+        Section("Big fish");
+
+        var missing = CachedBigFish();
+
+        ImGui.TextDisabled(missing == null
+            ? "The fishing log is not readable right now."
+            : $"{missing.Count} big fish are still missing from your log.");
+        ImGui.Spacing();
+
+        using (ImRaiiDisabled(missing is not { Count: > 0 }))
+        {
+            if (ImGui.Button("Write list to GatherBuddy") && missing is { Count: > 0 })
+            {
+                Trace.Pressed($"Write big fish list, {missing.Count} fish");
+                _bigFishResult = GatherListWriter.Write(missing,
+                    string.IsNullOrWhiteSpace(_config.GatherListPath)
+                        ? GatherList.DefaultPath
+                        : _config.GatherListPath);
+
+                Notify(_bigFishResult.Value.Message);
+                _restock.Refresh();
+            }
+        }
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip(missing is not { Count: > 0 }
+                ? "Nothing to write — either your log is complete or it cannot be read yet."
+                : $"Creates \"{GatherListWriter.ListName}\" with every big fish you have not caught." +
+                  Environment.NewLine +
+                  "Same selection as GatherBuddy's own Big Fish + Uncaught filters: ocean fish and " +
+                  "spearfishing" + Environment.NewLine +
+                  "are their own categories there, so they are left out here too." +
+                  Environment.NewLine + Environment.NewLine +
+                  "Your other lists are copied through untouched, and a timestamped backup is " +
+                  "written first." + Environment.NewLine +
+                  "An existing list of that name is replaced, and the difference goes to the log." +
+                  Environment.NewLine +
+                  "It arrives enabled, with Remove Completed on and Fallback off.");
+
+        if (_bigFishResult is not { } result)
+            return;
+
+        ImGui.Spacing();
+        if (!result.Ok)
+        {
+            ImGui.TextColored(Crimson, result.Message);
+            return;
+        }
+
+        // Das Wichtigste steht nicht im Hinweistext, sondern hier: Ohne
+        // Neuladen ist die Arbeit verloren, und zwar lautlos.
+        ImGui.TextColored(_config.HoneyTheme ? Honey : new Vector4(0.6f, 0.8f, 1f, 1f),
+            $"{result.Written} fish written. Now reload GatherBuddy.");
+        ImGui.TextWrapped(
+            "GatherBuddy reads that file only when it loads, and it rewrites the whole file from " +
+            "memory whenever a list changes. Until you reload it, the new list is invisible — and " +
+            "if you edit a list in GatherBuddy first, it is overwritten and gone.");
+
+        // Die Liste kommt eingeschaltet an, also plant dieses Plugin ab sofort
+        // Koeder fuer alle darin. Das ist gewollt, aber es sollte niemanden
+        // ueberraschen, der gleich darauf eine sehr lange Route sieht.
+        ImGui.TextWrapped(
+            $"This plugin already counts those {result.Written} fish: it reads the same file, so the " +
+            "bait table and any route now cover them.");
+
+        if (result.Backup is { } backup)
+            ImGui.TextDisabled($"Backup: {Path.GetFileName(backup)}");
+    }
+
+    /// <summary>
+    /// Die fehlenden grossen Fische, hoechstens alle paar Sekunden neu
+    /// ermittelt: Es sind zweieinhalbtausend Zeilen, und der Reiter zeichnet
+    /// sechzigmal die Sekunde.
+    /// </summary>
+    private List<BigFish.Catch>? CachedBigFish()
+    {
+        var now = Environment.TickCount64;
+        if (now < _bigFishAt)
+            return _bigFish;
+
+        _bigFishAt = now + 5000;
+        _bigFish = BigFish.Missing();
+        return _bigFish;
+    }
+
     /// <summary>
     /// An welche Rufglocke gefahren wird.
     ///

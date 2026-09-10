@@ -315,6 +315,42 @@ MIT — see [LICENSE](LICENSE).
 
 ## Changelog
 
+### 0.6.0
+
+**The gather list was read from the wrong folder.** This plugin had
+`GatherBuddyReborn` written into it. Dalamud files a plugin's settings under
+its internal name, and a custom build is called whatever its author called it —
+here, `NoriBuddy`. So the bait planning had been working from a snapshot four
+days old, and nothing ever failed: a file that exists and parses does not look
+wrong. It is the same shape as this month's other findings, one step along — not
+"read nothing and called it zero", but read *something* plausible that belonged
+to a different question.
+
+The folder is found by its files now, not its name: a loaded plugin whose config
+directory holds both `auto_gather_lists.json` and `gather_groups.json`.
+Options names the one in use, and lists every other, with leftovers marked "not
+loaded". The startup log says it too.
+
+**New: write a list of the big fish still missing from your log.** Options → Big
+fish. The same selection GatherBuddy's own filters make, taken from its source
+rather than guessed: big is `Item.Rarity > 1`, caught is
+`PlayerState.CaughtFishBitArray`, ocean fish and spearfishing are their own
+categories in that filter chain and so are left out here, and a fish with no
+fishing spot is skipped.
+
+Writing into another plugin's configuration deserves care, so: a timestamped
+backup first, and nothing is written if the backup fails. Existing lists are
+copied through as-is, including fields this plugin does not know. The result is
+read back and verified, and restored from the backup if it is not. An earlier
+list of the same name is replaced, and what changed goes to the log — which
+makes a hand-built list a way to check this one.
+
+GatherBuddy reads that file only when it loads, so reload it afterwards. That
+cannot be automated: its IPC has no endpoint for lists, none of its commands
+reload, and Dalamud does not let one plugin reload another.
+
+---
+
 ### 0.5.7
 
 **Ocean Fishing bait stays in your bags.** Ragworm for the surface, Krill for

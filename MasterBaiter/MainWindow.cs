@@ -27,6 +27,11 @@ internal sealed partial class MainWindow : Window
     // Der Beutelinhalt geht ueber alle Zeilen und alle ihre Preise. Einmal je
     // Sekunde reicht, wie bei der Routenplanung.
     private List<Purse.Holding> _purse = [];
+
+    /// <summary>Die fehlenden grossen Fische und das Ergebnis des letzten Schreibens.</summary>
+    private List<BigFish.Catch>? _bigFish;
+    private long _bigFishAt;
+    private GatherListWriter.Result? _bigFishResult;
     private long _purseAt;
 
     // Beide Gruende gehen ueber alle Inventarfaecher. Je Bild waere das
