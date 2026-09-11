@@ -103,9 +103,10 @@ Requires Dalamud API level 15 or newer.
 
 ## Using it
 
-The window has two tabs. **Baits** is the working view: the buttons you press
-while playing, and the table. **Options** holds everything you set once —
-stock levels, the bait list, travel, the market board, and the diagnostics.
+The window has three tabs. **Baits** is the working view: the buttons you press
+while playing, and the table. **Options** holds everything you set once — stock
+levels, the bait list, the market board, travel, appearance. **Debug** is for
+finding out why something did not happen.
 
 Under Options, set a **Bait target**, 300 by default, and a **Lure target**, 10
 by default. Lures cost ten to a thousand times what bait does, so they get their
@@ -118,38 +119,55 @@ order: **gil shop, then Cosmic Exploration, then scrip exchange**. Gil can be
 earned back; scrips cannot, so anything available for gil is bought for gil.
 This decides both the `Go` button and the order of stops in a route.
 
-The table lists every bait your fish need:
+### The table
 
 | Column | Meaning |
 |---|---|
 | Bait | Tick the box to skip this bait when buying |
 | Fish | How many fish on your list use it — hover for the names. A dash means no fish on your list needs it |
-| Inventory | How many you carry |
+| Total | Everything you own: bags, saddlebag, retainers. Hover for the breakdown |
+| Bag | What you can actually fish with. Amber means you own enough but not here |
 | Target | Per-bait override of the global target or lure target |
 | Missing | What would be bought |
-| Price | Gil or currency, live from the shop when one is open. A `~` marks a market board price seen during a run — hover for how many listings and how long ago |
+| Price | Gil or currency, live from the shop when one is open. A `~` marks a market board price seen during a run — hover for every currency it can be bought with |
 | Vendor | Where to get it — hover for names, zones and coordinates |
 
-**At a vendor** with the shop window open, `Buy missing` tops everything up. The
-game caps purchases at 99 per transaction, so larger amounts are bought in
-batches automatically.
+**Total and Bag are two numbers because they answer two questions.** Bait with a
+retainer counts against buying it again, and counts for nothing when you are
+standing at the water. The columns are sortable and the box above them filters
+by name.
 
-**At a scrip exchange** the same button does more work. That window only ever
-shows one subcategory at a time, and bait is spread over several of them
-("Lv. 50 Materials/Bait", "Lv. 90 Bait/Tokens" and so on). `Buy missing` walks
-through every category and every subcategory in turn and buys on each, so one
-click covers the whole shop instead of the tab that happened to be open.
+### Buying
 
-**Market board** is off by default. Switched on, two limits appear next to the
-checkbox — **gil per item** (1000 by default) and **gil per run** (100000) — and
-baits that no vendor sells show **market** in the Vendor column with their own
-`Go` button. `Run route` adds a market board as its last stop, last because it
-is the only stop that spends gil at prices other players set.
+**`Run route`** picks the smallest set of vendors that covers everything missing
+and visits them in turn — teleporting, walking, talking, buying. The button
+shows how many stops that will be; hover to see them, or press **`Preview`** for
+every stop with what it buys and what it costs before anything moves.
+`Stop route` aborts at any time.
 
-At the board, `Buy on market board` searches for each bait in turn, waits for
-the listings, buys, and moves on. Nothing about it is manual. If the game does
-not answer within a few seconds it says so and waits for you to search that bait
-yourself; the purchase then continues as normal.
+Routes are planned around the currency you actually hold: a vendor whose price
+you cannot pay is not a stop. Your balances sit at the right of the toolbar.
+
+**`Go`** next to a vendor teleports there and walks to the NPC. With
+`buy on arrival` ticked it also opens the shop and buys. Where a bait has
+several vendors, `Go` follows the currency order while `Run route` picks whoever
+covers the most baits in one stop — so the two lists are sorted differently on
+purpose, and the route tooltip names each stop's shop type.
+
+At a **scrip exchange** the window only ever shows one subcategory at a time,
+and bait is spread over several of them. A stop there walks every category and
+subcategory rather than the tab that happened to be open.
+
+**Cosmic Exploration** has no aetheryte, so a stop there rides instead of
+teleporting: to Bestways Burrow, over to Drivingway the Moon Rover, onto the
+planet you picked under Options, and on to the vendor. `Pick the planet
+automatically` is off by default — switched on, the plugin clicks the planet and
+Blast Off for you; switched off, you do those two clicks and it handles the rest.
+
+**Market board** is off by default. Switched on, two limits appear — **gil per
+item** and **gil per run** — and `Run route` adds a board as its last stop, last
+because it is the only stop that spends gil at prices other players set. You can
+pin which city it uses.
 
 Three rules decide what it buys, and all three are hard:
 
@@ -162,45 +180,57 @@ Three rules decide what it buys, and all three are hard:
   actual gil.
 
 Among the listings that pass, it takes the cheapest per item; at equal prices
-the larger stack, which gets you there in fewer purchases. Every listing is
-examined, not just the cheapest — the cheapest is often a big stack that the
-size rule rejects.
+the larger stack. Every listing is examined, not just the cheapest — the
+cheapest is often a big stack that the size rule rejects. When nothing is
+bought, the log names which of the three rules stopped it, since each one points
+at a different setting. A bait nobody is selling is left out of the next runs
+for three hours instead of costing five seconds every time.
 
-When nothing is bought, the log says which of the three rules stopped it, since
-each one points at a different setting:
+### Moving bait around
 
-```
-Spinner: skipped. Cheapest listing is 4500 gil each, above the 1000 gil limit.
-Yumizuno: skipped. Cheapest listing is 3899 gil each, but the smallest stack
-          on offer is 10 and only 4 are missing.
-Topwater Frog: skipped. Cheapest listing is 3999 gil each, but no stack of 4
-          or fewer fits the remaining 13018 gil.
-```
+**`Sort Bait Storage`** goes through every place your bait sits: the saddlebag
+first, since it opens anywhere, then a summoning bell and each retainer. At each
+one it fetches what your bags are short of and puts away what no fish needs any
+more. It travels to the bell on its own, opens each retainer and leaves it
+properly.
 
-**`Go`** next to a vendor teleports there and walks to the NPC. With
-`buy on arrival` ticked it also opens the shop and buys.
+Whole stacks only — the game moves stacks, not amounts. So a stack that would
+drop you below your target stays where it is, and having more than the target is
+never itself a reason to put something away. That surplus is yours.
 
-Where a bait has several vendors, `Go` follows the currency order — gil, then
-Cosmic Exploration, then scrips — while `Run route` picks whoever covers the
-most baits in one stop. The two lists are therefore sorted differently on
-purpose; the route tooltip names each stop's shop type so the difference is
-visible.
+Moves are deliberately slow and bounded: they are packets, and a burst of
+refused ones costs a disconnect. That is experience, not caution.
 
-**Cosmic Exploration** has no aetheryte, so `Go` on a bait sold there rides
-instead of teleporting: to Bestways Burrow, over to Drivingway the Moon Rover,
-onto the planet you picked under Options, and on to the vendor. `Pick the planet
-automatically` is off by default — switched on, the plugin clicks the planet and
-Blast Off for you; switched off, you do those two clicks and it handles the rest.
+**Ocean Fishing bait** — Ragworm, Krill, Plump Worm — stays in your bags. No
+gather list mentions it, so without that rule it looks like ballast and goes to
+a retainer, which you notice two minutes before the ferry.
 
-**`Run route`** picks the smallest set of vendors that covers everything missing
-and visits them in turn. The button shows how many stops that will be; hover to
-see them. `Stop route` aborts at any time.
+### Making a list of what you have not caught
+
+Options → **Big fish** writes a GatherBuddy list of every big fish still missing
+from your fishing log — the same selection its own *Big Fish* + *Uncaught*
+filters make. Your other lists are copied through untouched and a timestamped
+backup is written first.
+
+**GatherBuddy has to be reloaded afterwards.** It reads that file only when it
+loads. This cannot be automated: its IPC has no endpoint for lists, none of its
+commands reload, and Dalamud does not let one plugin reload another.
 
 ---
 
+
 ## Troubleshooting
 
-The three buttons below live under **Options → Diagnostics**.
+These live under the **Debug** tab, sorted by what they do: *Look* reads and
+writes to the log, *Bait storage* runs the steps of `Sort Bait Storage` one at a
+time, *Forget* clears what the plugin remembers.
+
+**The log follows the whole run.** Every state change of every part, every
+window opening and closing, the zone, your currencies, free bag slots, the route
+plan and which button you pressed. Transitions only, not frames — a whole route
+is a few hundred lines. It is on by default, because a log you switch on after
+something went wrong helps with the next one and not with this one. The switch
+is under Debug → Log.
 
 **`Self-check`** goes through every bait and writes a report to `/xllog`: what is
 reachable, what is only craftable, what has no source at all, and which zones it
@@ -218,6 +248,10 @@ is not what you want to hand around.
 
 **`Dump windows`** writes every visible game window with its raw values to the
 log. Useful if a dialog is not being recognised.
+
+**`Explain route`** writes, for every bait still missing, each vendor that sells
+it, whether it can be reached, what it costs there and whether that is payable.
+A bait that drops out of a route without a reason in that list is a bug.
 
 **The load message is worth a glance.** It reports how many lures were found and
 by which of the two signals, how many vendors were resolved, and how many market
@@ -242,8 +276,9 @@ baits or moves vendors, that table can go stale until it is regenerated.
 reported as unreachable rather than travelled to.
 
 **Some coordinates are estimated.** Where the game data has no height, the
-navmesh is asked for the floor. In multi-level areas the path can end up on the
-wrong one.
+plugin asks the navmesh for the nearest walkable ground within a few yalms. When
+the NPC is close enough to be in the object table its real position is used
+instead, which is always better than an estimate.
 
 **Only the first 100 market board listings are seen**, and the plugin waits one
 and a half seconds for them to arrive before deciding. On a slow connection it
@@ -264,6 +299,12 @@ possible. The log shows the scores when it happens.
 the usual callbacks, so the click is assembled and handed to the game. It works,
 but it is the one place where a game update could turn a click into a crash.
 That is why the option exists and why it is off by default.
+
+**Writing GatherBuddy's list file is an intrusion.** There is no other way in —
+its IPC does not expose lists. A backup is written first and nothing is changed
+if that fails, but GatherBuddy rewrites the whole file from memory whenever a
+list changes, so a list written here is lost if you edit one there before
+reloading.
 
 **Travel is unattended automation.** It moves your character between zones and
 spends gil. Watch it the first few times. Varying the delays does not hide any
