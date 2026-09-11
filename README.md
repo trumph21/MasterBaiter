@@ -315,6 +315,45 @@ MIT — see [LICENSE](LICENSE).
 
 ## Changelog
 
+### 0.6.1
+
+Read out of vnavmesh's own source rather than inferred from its behaviour,
+which corrected two things this plugin believed.
+
+**A path that stops is not a character that arrived.** `FollowPath` clears its
+waypoints whenever the navmesh reloads — which happens right after every zone
+change. From outside that is indistinguishable from finishing the walk: the log
+said "Walked to Summoning bell in 1,1 s" with the character thirty-four metres
+away, and an approach retry was then spent on a problem that did not exist. The
+distance to the requested spot is checked now, and a walk that ended more than
+ten metres short is simply walked again — the same spot, because the spot was
+not what failed.
+
+**The floor search was never a height search.** `FindPointOnFloor` takes the
+highest ground *below* a point and searches the entire column to do it —
+vnavmesh sets the vertical extent to 2048 internally. The number this plugin
+passed was the horizontal tolerance, not a vertical one. That is what found a
+deck eight metres down in Tuliyollal. A guessed height now goes through
+`NearestPointReachable` with a bounded box, and the floor search is only a
+fallback, which says in the log how far it dropped.
+
+**An approach spot is checked before walking to it**, with
+`IsPointOnMesh(..., allowUnreachable: false)`. A spot behind a market stall is
+skipped instead of costing an attempt to end up where you already stood.
+Unknown counts as usable — a wrong "no" would discard a spot that would have
+worked.
+
+**Also:** the log names the path's waypoint count and how far the walk ended
+from where it was sent. A two-waypoint path across a city is not a path, and
+that is the only place it shows.
+
+While reading: `SimpleMove.PathfindAndMoveCloseTo` starts pathfinding from
+`LocalPlayer?.Position ?? default` — so the `from <0. 0. 0>` behind the 0.5.6
+fix was a null player, not an unplaced one. The fix was right, its reasoning
+was not, and the comment now says so.
+
+---
+
 ### 0.6.0
 
 **The gather list was read from the wrong folder.** This plugin had

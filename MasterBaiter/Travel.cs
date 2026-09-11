@@ -83,6 +83,19 @@ internal sealed class Travel
     private const int ZoneGraceMs = 8_000;
     private const float InteractRange = 6f;
 
+    /// <summary>
+    /// Weiter als das vom angeforderten Ziel entfernt heisst: Der Weg ist
+    /// abgebrochen worden, nicht zu Ende gelaufen.
+    ///
+    /// Grosszuegig gewaehlt, weil ein Flug in der Luft endet und die Hoehe in
+    /// die Entfernung eingeht. Es geht nicht um Genauigkeit, sondern um den
+    /// Unterschied zwischen "da" und "ganz woanders".
+    /// </summary>
+    private const float PathLostDistance = 10f;
+
+    /// <summary>Wie oft derselbe Weg neu gerechnet wird, bevor der Platz schuld ist.</summary>
+    private const int MaxRepaths = 3;
+
     // vnavmesh
     private readonly ICallGateSubscriber<bool> _navReady;
     private readonly ICallGateSubscriber<Vector3, bool, float, bool> _navMoveCloseTo;
@@ -90,6 +103,9 @@ internal sealed class Travel
     private readonly ICallGateSubscriber<bool> _navPathfinding;
     private readonly ICallGateSubscriber<object> _navStop;
     private readonly ICallGateSubscriber<Vector3, bool, float, Vector3?> _navPointOnFloor;
+    private readonly ICallGateSubscriber<Vector3, float, float, Vector3?> _navNearestReachable;
+    private readonly ICallGateSubscriber<Vector3, float, bool, bool> _navOnMesh;
+    private readonly ICallGateSubscriber<int> _navWaypoints;
 
     // Lifestream
     private readonly ICallGateSubscriber<uint, byte, bool> _lsTeleport;
@@ -115,6 +131,11 @@ internal sealed class Travel
     private long _zoneSettledAt;
     private int _landAttempts;
 
+    /// <summary>Wohin zuletzt geschickt wurde, und wie oft der Weg neu gerechnet wurde.</summary>
+    private Vector3 _destination;
+    private int _repaths;
+    private bool _loggedPath;
+
     /// <summary>Wird ausgeloest, sobald das Haendlerfenster offen ist.</summary>
     public event Action? Arrived;
 
@@ -131,6 +152,9 @@ internal sealed class Travel
         _navPathfinding = pi.GetIpcSubscriber<bool>("vnavmesh.SimpleMove.PathfindInProgress");
         _navStop = pi.GetIpcSubscriber<object>("vnavmesh.Path.Stop");
         _navPointOnFloor = pi.GetIpcSubscriber<Vector3, bool, float, Vector3?>("vnavmesh.Query.Mesh.PointOnFloor");
+        _navNearestReachable = pi.GetIpcSubscriber<Vector3, float, float, Vector3?>("vnavmesh.Query.Mesh.NearestPointReachable");
+        _navOnMesh = pi.GetIpcSubscriber<Vector3, float, bool, bool>("vnavmesh.Query.Mesh.IsPointOnMesh");
+        _navWaypoints = pi.GetIpcSubscriber<int>("vnavmesh.Path.NumWaypoints");
 
         _lsTeleport = pi.GetIpcSubscriber<uint, byte, bool>("Lifestream.Teleport");
         _lsBusy = pi.GetIpcSubscriber<bool>("Lifestream.IsBusy");
@@ -232,6 +256,7 @@ internal sealed class Travel
 
         _target = vendor;
         _approachRetries = 0;
+        _repaths = 0;
         _tried.Clear();
         _talkAttempts = 0;
         _zoneSettledAt = 0;
@@ -488,16 +513,25 @@ internal sealed class Travel
                 // "12,9 away, too far to interact" — sechsmal, bis der Halt
                 // ausfiel. Der Weg war richtig, das Stockwerk nicht.
                 if (live == null && _target.ApproximateHeight)
+                    destination = OnMesh(destination);
+
+                // Liegt der Punkt ueberhaupt auf begehbarem Netz? Ein Platz
+                // hinter einem Verkaufsstand tut es nicht, und ihn anzulaufen
+                // kostet einen Versuch, um am Ende dort zu stehen, wo man schon
+                // stand.
+                if (_approachRetries > 0 && !Reachable(destination))
                 {
-                    try
-                    {
-                        var onFloor = _navPointOnFloor.InvokeFunc(destination, false, 10f);
-                        if (onFloor is { } p)
-                            destination = p;
-                    }
-                    catch { /* dann eben ohne */ }
+                    Trace.Say($"Approach spot {_approachRetries + 1} for {_target.Npc} is not on " +
+                              "reachable ground, skipping it.");
+
+                    if (TryAnotherSpot("spot not on the mesh"))
+                        return;
+
+                    Fail($"No reachable spot near {_target.Npc}.");
+                    return;
                 }
 
+                _destination = destination;
                 _tried.Add(destination);
                 Trace.Say($"Walking to {_target.Npc}: " +
                           $"({destination.X:0.0}, {destination.Y:0.0}, {destination.Z:0.0}), " +
@@ -521,6 +555,7 @@ internal sealed class Travel
                 }
 
                 _step = Step.Walking;
+                _loggedPath = false;
                 _walkStartedAt = Environment.TickCount64;
                 MarkMoved();
                 // vnavmesh rechnet den Pfad nebenlaeufig. Ohne diese Schonfrist
@@ -547,6 +582,16 @@ internal sealed class Travel
 
                 if (running)
                 {
+                    // Die Laenge des Weges, einmal je Lauf. Ein Weg aus zwei
+                    // Punkten quer durch eine Stadt ist keiner, und das sieht
+                    // man nur an dieser Zahl.
+                    if (!_loggedPath)
+                    {
+                        _loggedPath = true;
+                        try { Trace.Say($"Path to {_target.Npc}: {_navWaypoints.InvokeFunc()} waypoint(s)."); }
+                        catch { /* aeltere Fassung ohne diese Abfrage */ }
+                    }
+
                     if (!Stuck())
                         return;
 
@@ -562,11 +607,36 @@ internal sealed class Travel
                     return;
                 }
 
+                // Ein beendeter Weg ist kein angekommener Charakter.
+                //
+                // vnavmesh raeumt seine Wegpunkte auch weg, wenn das
+                // Navigationsnetz neu geladen wird — und das passiert direkt
+                // nach jedem Gebietswechsel. Von aussen sieht das aus wie
+                // "fertig gelaufen": Im Protokoll stand "Walked to Summoning
+                // bell in 1,1 s", und der Charakter war vierunddreissig Meter
+                // entfernt. Danach wurde ein Ausweichpunkt verbraucht fuer ein
+                // Problem, das keiner war.
+                var away = DistanceTo(_destination);
+                if (away is { } gap && gap > PathLostDistance && _repaths < MaxRepaths)
+                {
+                    _repaths++;
+                    Plugin.Log.Warning(
+                        $"[MasterBaiter] The path to {_target.Npc} ended {gap:0.0} away. " +
+                        $"Walking it again ({_repaths} of {MaxRepaths}) — the same spot, because " +
+                        "the spot was not the problem.");
+
+                    Status = $"Walking to {_target.Npc}.";
+                    _step = Step.Pathfinding;
+                    _nextActionAt = Pacing.Next(600);
+                    return;
+                }
+
                 // Die Dauer mitschreiben: Ein Weg, der aus dem Ruder laeuft,
                 // sieht im Protokoll sonst genauso aus wie ein kurzer.
                 Plugin.Log.Information(
                     $"[MasterBaiter] Walked to {_target.Npc} in " +
-                    $"{(Environment.TickCount64 - _walkStartedAt) / 1000.0:0.0} s.");
+                    $"{(Environment.TickCount64 - _walkStartedAt) / 1000.0:0.0} s" +
+                    (away is { } d ? $", {d:0.0} from where it was sent." : ".") );
 
                 // Fliegend laesst sich niemand ansprechen. vnavmesh fliegt bis
                 // auf Reichweite heran und bleibt dort in der Luft stehen; von
@@ -828,6 +898,67 @@ internal sealed class Travel
 
         var me = Plugin.ObjectTable.LocalPlayer;
         return me != null && me.Position.LengthSquared() > 0.01f;
+    }
+
+    /// <summary>
+    /// Wie weit der Charakter von einem Punkt entfernt ist, oder null, wenn
+    /// sich das gerade nicht sagen laesst.
+    /// </summary>
+    private static float? DistanceTo(Vector3 point)
+    {
+        var me = Plugin.ObjectTable.LocalPlayer;
+        return me == null || point == Vector3.Zero ? null : Vector3.Distance(me.Position, point);
+    }
+
+    /// <summary>
+    /// Liegt dieser Punkt auf begehbarem, erreichbarem Netz?
+    ///
+    /// Unbekannt zaehlt als ja: Ein falsches Nein liesse einen Ausweichpunkt
+    /// aus, der getaugt haette, und vnavmesh sagt ohnehin selbst Bescheid,
+    /// wenn es keinen Weg findet.
+    /// </summary>
+    private bool Reachable(Vector3 point)
+    {
+        try { return _navOnMesh.InvokeFunc(point, 5f, false); }
+        catch { return true; }
+    }
+
+    /// <summary>
+    /// Legt einen geschaetzten Punkt auf das Navigationsnetz.
+    ///
+    /// <c>NearestPointReachable</c> sucht in einem begrenzten Kaestchen um den
+    /// Punkt herum. Die Bodensuche, die hier frueher stand, tut etwas anderes:
+    /// Sie nimmt den hoechsten Boden <b>unterhalb</b> des Punktes und sucht
+    /// dafuer ueber die gesamte Saeule — vnavmesh setzt die senkrechte
+    /// Ausdehnung intern auf 2048. In Tuliyollal fand sie damit das Deck
+    /// achteinhalb Meter tiefer, und der Charakter stand unter dem Haendler.
+    ///
+    /// Der Zahlenwert, den wir dort uebergaben, war nie eine Hoehentoleranz,
+    /// sondern die Ausdehnung in der Ebene. Die Bodensuche bleibt als
+    /// Rueckfall, falls im Kaestchen nichts liegt — dann ist irgendein Boden
+    /// besser als keiner.
+    /// </summary>
+    private Vector3 OnMesh(Vector3 point)
+    {
+        try
+        {
+            if (_navNearestReachable.InvokeFunc(point, 5f, 5f) is { } near)
+                return near;
+        }
+        catch { /* aeltere Fassung ohne diese Abfrage */ }
+
+        try
+        {
+            if (_navPointOnFloor.InvokeFunc(point, false, 10f) is { } floor)
+            {
+                Trace.Say($"No reachable ground within 5 of {_target.Npc}; " +
+                          $"fell back to the floor search, which landed {point.Y - floor.Y:0.0} lower.");
+                return floor;
+            }
+        }
+        catch { /* dann eben ohne */ }
+
+        return point;
     }
 
     private static Vector3 OffsetSpot(Vector3 centre, int attempt)
