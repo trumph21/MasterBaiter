@@ -315,6 +315,19 @@ MIT — see [LICENSE](LICENSE).
 
 ## Changelog
 
+### 0.6.2
+
+**The button names what it makes:** *Create "Big Fish" list in GatherBuddy*.
+The label is built from the same constant that names the list, so the two
+cannot drift apart.
+
+**The reload note is there before you press it**, not after. It used to appear
+only once the list had been written — which is too late: by then you have
+already looked in GatherBuddy and found nothing. Why it is needed is in the
+tooltip.
+
+---
+
 ### 0.6.1
 
 Read out of vnavmesh's own source rather than inferred from its behaviour,

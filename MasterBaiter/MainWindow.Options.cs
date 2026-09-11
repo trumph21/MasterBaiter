@@ -413,7 +413,8 @@ internal sealed partial class MainWindow
 
         using (ImRaiiDisabled(missing is not { Count: > 0 }))
         {
-            if (ImGui.Button("Write list to GatherBuddy") && missing is { Count: > 0 })
+            if (ImGui.Button($"Create \"{GatherListWriter.ListName}\" list in GatherBuddy")
+                && missing is { Count: > 0 })
             {
                 Trace.Pressed($"Write big fish list, {missing.Count} fish");
                 _bigFishResult = GatherListWriter.Write(missing,
@@ -439,6 +440,18 @@ internal sealed partial class MainWindow
                   "An existing list of that name is replaced, and the difference goes to the log." +
                   Environment.NewLine +
                   "It arrives enabled, with Remove Completed on and Fallback off.");
+
+        // Der Hinweis steht hier und nicht erst nach dem Schreiben: Wer erst
+        // hinterher erfaehrt, dass noch ein Handgriff fehlt, hat schon in
+        // GatherBuddy nachgesehen und nichts gefunden.
+        ImGui.TextDisabled("GatherBuddy has to be reloaded afterwards.");
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(
+                "It reads that file only when it loads, and rewrites the whole file from memory " +
+                "whenever a list changes." + Environment.NewLine +
+                "So until you reload it the new list is invisible — and editing a list there first " +
+                "overwrites it." + Environment.NewLine +
+                "Reload from Dalamud's plugin installer.");
 
         if (_bigFishResult is not { } result)
             return;
