@@ -216,6 +216,12 @@ backup is written first.
 loads. This cannot be automated: its IPC has no endpoint for lists, none of its
 commands reload, and Dalamud does not let one plugin reload another.
 
+### One thing worth knowing
+
+This is unattended automation: it moves your character between zones and spends
+gil. Watch it the first few times. Varying the delays does not hide any of
+that — using a plugin at all is what carries the risk, not how evenly it clicks.
+
 ---
 
 
@@ -257,59 +263,6 @@ A bait that drops out of a route without a reason in that list is a bug.
 by which of the two signals, how many vendors were resolved, and how many market
 boards are known. A zero where you expect a number is the fastest sign that a
 game patch has moved something.
-
----
-
-## Known limits
-
-**Market board locations come from two sources.** Market boards are not in the
-game's location sheet at all, so the plugin ships coordinates read out of the
-map files for the seven cities you can teleport to. Anywhere else — Tuliyollal
-and Solution Nine place theirs differently — the plugin remembers the board once
-you have stood near it, and can travel there from then on.
-
-**The vendor location table is a snapshot.** Some NPCs are not in the game's own
-location data, so their coordinates ship with the plugin. After a patch that adds
-baits or moves vendors, that table can go stale until it is regenerated.
-
-**Cosmic Exploration areas cannot be reached by teleport.** Vendors there are
-reported as unreachable rather than travelled to.
-
-**Some coordinates are estimated.** Where the game data has no height, the
-plugin asks the navmesh for the nearest walkable ground within a few yalms. When
-the NPC is close enough to be in the object table its real position is used
-instead, which is always better than an estimate.
-
-**Only the first 100 market board listings are seen**, and the plugin waits one
-and a half seconds for them to arrive before deciding. On a slow connection it
-may settle for a listing that was the cheapest so far rather than the cheapest
-there is.
-
-**Market board prices are remembered for the session only.** A price from
-yesterday is not information, it is a trap — after a restart the column shows
-`—` again until the next run.
-
-**The shop behind an NPC's menu is picked by its wording.** Where an NPC offers
-several shops, the plugin scores the menu entries for words like "items" or
-"bait". The wording does not reliably say what is inside — at the Cosmocredit
-Exchange the bait sits under "(Materials/Materia/Items)" — so a wrong pick is
-possible. The log shows the scores when it happens.
-
-**Clicking the planet is a simulated event.** The planet window does not accept
-the usual callbacks, so the click is assembled and handed to the game. It works,
-but it is the one place where a game update could turn a click into a crash.
-That is why the option exists and why it is off by default.
-
-**Writing GatherBuddy's list file is an intrusion.** There is no other way in —
-its IPC does not expose lists. A backup is written first and nothing is changed
-if that fails, but GatherBuddy rewrites the whole file from memory whenever a
-list changes, so a list written here is lost if you edit one there before
-reloading.
-
-**Travel is unattended automation.** It moves your character between zones and
-spends gil. Watch it the first few times. Varying the delays does not hide any
-of this: using a plugin at all is what carries the risk, not how evenly it
-clicks.
 
 <!-- repo-only -->
 ---
